@@ -19,12 +19,10 @@ Item {
     // 1-2 terminal rows.
     readonly property int padding: 14      // left inset, matches foot's pad=14x14
     readonly property int borderSize: 2    // Hyprland window border
-    // Sizes follow the system font size (Style.fontScale = base-size / 12), so a
-    // user with larger or smaller system text gets a proportionally taller strip.
-    readonly property int fontSize: Math.round(14 * Style.fontScale)
+    // The bar's height follows the system font size (Style.fontScale = base-size / 12).
+    // Its text is sized per window to match that terminal's own text (see fontPx).
     readonly property int dividerHeight: 2
-    // The box is sized for 18px text; the smaller title is centered in it, which
-    // leaves a little breathing room above and below.
+    // The box is sized for 18px text; the terminal-sized title is centered in it.
     readonly property int stripHeight: Math.round(18 * Style.fontScale * 1.6) + dividerHeight
 
     readonly property string scanScript: Qt.resolvedUrl("scan.py").toString().replace("file://", "")
@@ -104,6 +102,9 @@ Item {
             id: strip
             required property var modelData
             property bool tipOpen: false
+            // scan.py reports the terminal's font size in points; same size as the
+            // terminal's own text (96 dpi), so the strip reads as part of the session.
+            readonly property int fontPx: Math.round((modelData.fontPt ?? 10) * 96 / 72)
 
             // Resolved separately: binding visible to screen (which a visible
             // surface also sets) is a binding loop.
@@ -153,7 +154,7 @@ Item {
                         text: "●"
                         color: root.dotColor(strip.modelData.phase)
                         font.family: Style.fontFamily
-                        font.pixelSize: Math.round(root.fontSize * 0.8)
+                        font.pixelSize: Math.round(strip.fontPx * 0.8)
                     }
 
                     // Right-hand status. While the agent waits on you it is only the red
@@ -162,7 +163,7 @@ Item {
                         id: status
                         readonly property bool isWaiting: strip.modelData.phase === "waiting"
                         readonly property int context: strip.modelData.context ?? -1
-                        readonly property int smallFont: Math.round(root.fontSize * 0.64)
+                        readonly property int smallFont: Math.round(strip.fontPx * 0.85)
 
                         anchors {
                             right: parent.right
@@ -198,8 +199,8 @@ Item {
                             Rectangle {
                                 id: track
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.round(root.fontSize * 5.5)
-                                height: Math.round(root.fontSize * 0.55)
+                                width: Math.round(strip.fontPx * 5.5)
+                                height: Math.round(strip.fontPx * 0.55)
                                 radius: height / 2
                                 color: Qt.alpha(Color.foreground, 0.18)
 
@@ -236,7 +237,7 @@ Item {
                         color: Color.foreground
                         elide: Text.ElideRight
                         font.family: Style.fontFamily
-                        font.pixelSize: root.fontSize
+                        font.pixelSize: strip.fontPx
                     }
                 }
 

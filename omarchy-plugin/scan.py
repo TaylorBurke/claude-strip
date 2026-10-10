@@ -9,9 +9,20 @@ Stale files (dead pid, or session ended) are deleted.
 import glob
 import json
 import os
+import re
 import subprocess
 
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-strip")
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+
+# Where each terminal keeps its font size, and the size it uses when unset.
+TERMINAL_CONFIGS = {
+    "foot": ("foot/foot.ini", 10.0),
+    "alacritty": ("alacritty/alacritty.toml", 11.25),
+    "kitty": ("kitty/kitty.conf", 11.0),
+    "ghostty": ("ghostty/config", 12.0),
+}
+DEFAULT_FONT_PT = 10.0
 
 
 def hypr(what):
@@ -24,6 +35,48 @@ def parent_of(pid):
             return int(f.read().rsplit(")", 1)[1].split()[1])
     except (OSError, ValueError, IndexError):
         return 0
+
+
+def parse_font_pt(terminal, text):
+    """The font size in points a terminal's config sets, or None when it sets none."""
+    number = r"([0-9]+(?:\.[0-9]+)?)"
+    if terminal == "foot":
+        match = re.search(r"^\s*font\s*=.*?:size=" + number, text, re.M)
+    elif terminal == "alacritty":
+        section, match = None, None
+        for line in text.splitlines():
+            head = re.match(r"^\s*\[([^\]]+)\]", line)
+            if head:
+                section = head.group(1).strip()
+                continue
+            if section in ("font", "font.normal"):
+                match = re.match(r"^\s*size\s*=\s*" + number, line)
+                if match and section == "font":
+                    break
+    elif terminal == "kitty":
+        match = re.search(r"^\s*font_size\s+" + number, text, re.M)
+    elif terminal == "ghostty":
+        match = re.search(r"^\s*font-size\s*=\s*" + number, text, re.M)
+    else:
+        match = None
+    return float(match.group(1)) if match else None
+
+
+def terminal_font_pt(pid):
+    """The font size of the terminal that owns this window's process."""
+    try:
+        terminal = os.path.basename(os.readlink(f"/proc/{pid}/exe")).lower()
+    except OSError:
+        return DEFAULT_FONT_PT
+    entry = TERMINAL_CONFIGS.get(terminal)
+    if entry is None:
+        return DEFAULT_FONT_PT
+    path, default = entry
+    try:
+        with open(os.path.join(CONFIG_HOME, path)) as f:
+            return parse_font_pt(terminal, f.read()) or default
+    except OSError:
+        return default
 
 
 def window_for(pid, clients_by_pid):
@@ -77,6 +130,7 @@ def main():
             y=win["at"][1] - mon["y"],
             w=win["size"][0],
             h=win["size"][1],
+            fontPt=terminal_font_pt(win["pid"]),
         )
         out.append(s)
     print(json.dumps(out))

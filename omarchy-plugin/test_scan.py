@@ -13,6 +13,23 @@ class ParentOf(unittest.TestCase):
         self.assertEqual(scan.parent_of(2**22 + 12345), 0)
 
 
+class ParseFontPt(unittest.TestCase):
+    def test_foot(self):
+        self.assertEqual(scan.parse_font_pt("foot", "[main]\nfont=JetBrainsMono Nerd Font:size=10\n"), 10.0)
+
+    def test_alacritty_reads_the_font_section_only(self):
+        text = "[window]\nsize = 99\n[font]\nsize = 9\n[cursor]\nsize = 1\n"
+        self.assertEqual(scan.parse_font_pt("alacritty", text), 9.0)
+
+    def test_ghostty_and_kitty(self):
+        self.assertEqual(scan.parse_font_pt("ghostty", "font-size = 9\n"), 9.0)
+        self.assertEqual(scan.parse_font_pt("kitty", "# font_size 12\nfont_size 13.5\n"), 13.5)
+
+    def test_unset_or_unknown_is_none(self):
+        self.assertIsNone(scan.parse_font_pt("foot", "[main]\nterm=xterm\n"))
+        self.assertIsNone(scan.parse_font_pt("wezterm", "font_size 12"))
+
+
 class WindowFor(unittest.TestCase):
     def test_walks_ancestors_to_the_window(self):
         parents = {300: 200, 200: 100, 100: 1}

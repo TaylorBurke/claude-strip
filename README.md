@@ -24,7 +24,8 @@ The strip is terminal-agnostic: each session is matched to its Hyprland window
 by walking the process tree, so foot, Alacritty, kitty and ghostty all work.
 It is a header in the theme's background color with a 2px divider line below
 it, drawn over the top of the window, so it covers the first one or two
-terminal rows. Its text size follows your system font size, and hovering the
+terminal rows. Its text is the same size as the terminal's own text (read from the
+terminal's config: foot, Alacritty, kitty and ghostty are supported), and hovering the
 strip shows the full title in a tooltip when a narrow window elides it.
 
 ## Install
@@ -70,11 +71,11 @@ Mod options (Claude Code config menu):
   title is the first prompt, truncated.
 - **Re-summarize every N turns** (default 3).
 
-The strip's size lives at the top of `omarchy-plugin/Service.qml`. `fontSize`
-is 18px at the default 12px system font and scales with Omarchy's font
-setting (`Style.fontScale`); `stripHeight`, `dividerHeight`, `padding` and
-`borderSize` can be changed there too. Long titles are elided on the right in
-narrow windows.
+The strip's text size is taken from each window's terminal config, so it always
+matches the session text. Its height follows Omarchy's system font setting
+(`Style.fontScale`); `dividerHeight`, `padding` and `borderSize` sit at the top
+of `omarchy-plugin/Service.qml`. Long titles are elided on the right in narrow
+windows.
 
 ## How it works
 
