@@ -14,20 +14,24 @@ Item {
     property var shell: null
     property var sessions: []
 
-    // The strip sits inside the terminal's own top padding (foot: pad=14x14),
-    // so it never covers text. Adjust if your terminal pads differently.
-    readonly property int padding: 14
-    readonly property int borderSize: 2
+    // An opaque header drawn over the top of the terminal window, in the theme's
+    // background color, so it reads as part of the window. It covers the top
+    // 1-2 terminal rows; raise or lower stripHeight/fontSize to taste.
+    readonly property int padding: 14      // left inset, matches foot's pad=14x14
+    readonly property int borderSize: 2    // Hyprland window border
+    readonly property int fontSize: 25     // 2.5x the terminal's own text
+    readonly property int stripHeight: 36  // includes the 1px divider line
 
     readonly property string scanScript: Qt.resolvedUrl("scan.py").toString().replace("file://", "")
 
-    function describe(s) {
-        const parts = [s.project, s.task];
+    // The right-hand badge: kept short and out of the title's way so a long
+    // title is what gets elided in a narrow window.
+    function badge(s) {
         if (s.phase === "waiting")
-            parts.push("waiting for you");
-        else if (s.running > 0)
-            parts.push(s.running + (s.running === 1 ? " tool running" : " tools running"));
-        return parts.filter(p => p && p.length > 0).join(" · ");
+            return "waiting for you";
+        if (s.running > 0)
+            return s.running + (s.running === 1 ? " tool running" : " tools running");
+        return "";
     }
 
     function dotColor(phase) {
@@ -101,11 +105,11 @@ Item {
                 left: true
             }
             margins {
-                left: modelData.x + root.borderSize + root.padding
+                left: modelData.x + root.borderSize
                 top: modelData.y + root.borderSize
             }
-            implicitWidth: Math.max(0, modelData.w - 2 * (root.borderSize + root.padding))
-            implicitHeight: root.padding
+            implicitWidth: Math.max(0, modelData.w - 2 * root.borderSize)
+            implicitHeight: root.stripHeight
 
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.namespace: "claude-strip"
@@ -113,28 +117,89 @@ Item {
             color: "transparent"
             mask: Region {}
 
-            Row {
+            Rectangle {
                 anchors.fill: parent
-                spacing: 6
+                color: Color.background
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    textFormat: Text.PlainText
-                    text: "●"
-                    color: root.dotColor(strip.modelData.phase)
-                    font.family: Style.fontFamily
-                    font.pixelSize: 9
+                Item {
+                    id: content
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                        bottom: divider.top
+                        leftMargin: root.padding
+                        rightMargin: root.padding
+                    }
+
+                    Text {
+                        id: dot
+                        anchors {
+                            left: parent.left
+                            verticalCenter: parent.verticalCenter
+                        }
+                        textFormat: Text.PlainText
+                        text: "●"
+                        color: root.dotColor(strip.modelData.phase)
+                        font.family: Style.fontFamily
+                        font.pixelSize: Math.round(root.fontSize * 0.8)
+                    }
+
+                    Text {
+                        id: project
+                        anchors {
+                            left: dot.right
+                            leftMargin: 10
+                            verticalCenter: parent.verticalCenter
+                        }
+                        textFormat: Text.PlainText
+                        text: strip.modelData.project
+                        color: Color.foreground
+                        font.family: Style.fontFamily
+                        font.pixelSize: root.fontSize
+                        font.bold: true
+                    }
+
+                    Text {
+                        id: badge
+                        anchors {
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                        }
+                        textFormat: Text.PlainText
+                        text: root.badge(strip.modelData)
+                        color: strip.modelData.phase === "waiting" ? Color.urgent : Color.muted
+                        font.family: Style.fontFamily
+                        font.pixelSize: Math.round(root.fontSize * 0.64)
+                    }
+
+                    Text {
+                        anchors {
+                            left: project.right
+                            leftMargin: 10
+                            right: badge.text.length > 0 ? badge.left : parent.right
+                            rightMargin: 14
+                            verticalCenter: parent.verticalCenter
+                        }
+                        textFormat: Text.PlainText
+                        text: strip.modelData.task ? "· " + strip.modelData.task : ""
+                        color: Qt.alpha(Color.foreground, 0.8)
+                        elide: Text.ElideRight
+                        font.family: Style.fontFamily
+                        font.pixelSize: root.fontSize
+                    }
                 }
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - 15
-                    textFormat: Text.PlainText
-                    text: root.describe(strip.modelData)
-                    color: Color.foreground
-                    elide: Text.ElideRight
-                    font.family: Style.fontFamily
-                    font.pixelSize: 10
+                // Thin divider, a muted tint of the theme's own foreground.
+                Rectangle {
+                    id: divider
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    height: 1
+                    color: Qt.alpha(Color.foreground, 0.3)
                 }
             }
         }

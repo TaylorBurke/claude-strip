@@ -4,12 +4,16 @@ type Phase = 'idle' | 'working' | 'waiting' | 'ended'
 
 const MAX_RECENT = 4
 const MAX_PROMPT_CHARS = 300
-const MAX_TASK_CHARS = 48
+const MAX_ANSWER_CHARS = 500
+const MAX_TASK_CHARS = 100
 
 const SYSTEM =
-  'You label coding sessions for a tiny status strip. Reply with ONLY a 3-6 word ' +
-  'lowercase phrase starting with a verb ending in -ing, naming what the user is ' +
-  'working on. No punctuation, no quotes, no preamble.'
+  'You write the title shown in a header strip above a coding session, so someone ' +
+  'juggling several sessions can tell them apart. Reply with ONLY a specific 8-14 ' +
+  'word lowercase phrase starting with a verb ending in -ing. Name the concrete ' +
+  'feature, bug, file or system being worked on, not the generic activity. Judge by ' +
+  'the whole session, favouring what the assistant is doing now. No quotes, no ' +
+  'trailing punctuation, no preamble.'
 
 // Module state starts over on a hot reload; session.start refills it.
 let useHaiku = true
@@ -22,6 +26,7 @@ let phase: Phase = 'idle'
 let running = 0
 let turns = 0
 let recent: string[] = []
+let lastAnswer = ''
 let isSummarizing = false
 
 function squash(text: string, max: number): string {
@@ -40,9 +45,10 @@ async function summarize($: EngineInterface): Promise<void> {
   isSummarizing = true
   try {
     const prompt =
-      `Previous label: ${task || '(none)'}\nRecent user prompts, oldest first:\n` +
-      recent.map((p, i) => `${i + 1}. ${p}`).join('\n')
-    const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 24, effort: 'low' })
+      `Project: ${project}\nPrevious title: ${task || '(none)'}\n` +
+      `Recent user prompts, oldest first:\n${recent.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n` +
+      `Assistant's latest reply (start of it):\n${lastAnswer || '(none yet)'}`
+    const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 64, effort: 'low' })
     if (r.isAnswered) {
       const label = squash(r.text.replace(/["'.]/g, ''), MAX_TASK_CHARS)
       if (label) task = label
@@ -99,6 +105,9 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    // Subagent turns also land here; only the main loop moves the strip.
+    if (e.agentId) return next(e)
+    lastAnswer = squash(e.answer ?? '', MAX_ANSWER_CHARS)
     phase = 'idle'
     running = 0
     turns += 1

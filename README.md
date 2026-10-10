@@ -19,8 +19,9 @@ It has two halves that talk through a small state file per session:
 
 The strip is terminal-agnostic: each session is matched to its Hyprland window
 by walking the process tree, so foot, Alacritty, kitty and ghostty all work.
-It is drawn in the terminal's own top padding (14px, foot's default), so it
-never covers text.
+It is a 36px header in the theme's background color with a thin divider line
+below it, drawn over the top of the window, so it covers the first one or two
+terminal rows.
 
 ## Install
 
@@ -54,14 +55,16 @@ only adds itself to the plugin list in `shell.json` when you enable it.
 Mod options (Claude Code config menu):
 
 - **Summarize the task with Haiku** (default on). After turn 1 and then every N
-  turns, one Haiku call through your session's own client rewrites the task
-  line. It sends the last four prompts, each cut to 300 characters, and costs
-  about $0.0006. Off: the task is the first prompt, truncated.
+  turns, one Haiku call through your session's own client rewrites the title
+  (8-14 words, naming the concrete feature or bug). It sends the project name,
+  the last four prompts (each cut to 300 characters) and the start of the
+  assistant's latest reply (500 characters), and costs about $0.001. Off: the
+  title is the first prompt, truncated.
 - **Re-summarize every N turns** (default 3).
 
-The strip height and inset live at the top of `omarchy-plugin/Service.qml`
-(`padding`, `borderSize`). Change `padding` if your terminal pads its top edge
-differently from 14px.
+The strip's size lives at the top of `omarchy-plugin/Service.qml`:
+`fontSize` (25, 2.5x a 10pt terminal), `stripHeight` (36), `padding` and
+`borderSize`. Long titles are elided on the right in narrow windows.
 
 ## How it works
 

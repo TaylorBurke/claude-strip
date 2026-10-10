@@ -50,7 +50,7 @@ test('a long first prompt is truncated for the strip', async ($, on) => {
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'x'.repeat(200) })
 
-  expect(String(world.last()?.task).length).toBeLessThanOrEqual(48)
+  expect(String(world.last()?.task).length).toBeLessThanOrEqual(100)
   expect(String(world.last()?.task).endsWith('…')).toBe(true)
 })
 
@@ -67,12 +67,24 @@ test('turn.complete goes idle and Haiku rewrites the task after turn 1', async (
   const world = engine(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'ota paths are broken' })
-  await $.turn.complete({ reason: 'answer' } as never)
+  await $.turn.complete({ reason: 'answer', answer: 'Found the stale asset manifest' } as never)
   await world.clock.advance(0)
 
   expect(world.models).toHaveLength(1)
   expect(world.models[0]).toContain('ota paths are broken')
+  expect(world.models[0]).toContain('Found the stale asset manifest')
   expect(world.last()).toMatchObject({ phase: 'idle', turns: 1, task: 'fixing OTA asset paths' })
+})
+
+test('a subagent turn does not count or trigger a summary', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'do the thing' })
+  await $.turn.complete({ reason: 'answer', answer: 'sub report', agentId: 'agent-1' } as never)
+  await world.clock.advance(0)
+
+  expect(world.models).toHaveLength(0)
+  expect(world.last()).toMatchObject({ phase: 'working', turns: 0 })
 })
 
 test('with useHaiku off no model call is made', { options: { useHaiku: false } }, async ($, on) => {
