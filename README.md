@@ -1,5 +1,7 @@
 # Claude Strip
 
+![Claude Strip showing four sessions: working, waiting on you, nearly full context, and low context](preview.png)
+
 A thin status strip at the top of every terminal window running Claude Code, so
 you can tell your agents apart when several run side by side:
 
