@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "taylorburke.claude-strip",
+  "name": "Claude Strip",
+  "version": "0.1.0",
+  "author": "Taylor Burke",
+  "license": "MIT",
+  "description": "A thin strip at the top of each terminal window running Claude Code, showing the session's project, task and running tools. Terminal-agnostic; pair with the session-strip Claude Code mod.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "omarchy-plugin/Service.qml"
+  }
+}

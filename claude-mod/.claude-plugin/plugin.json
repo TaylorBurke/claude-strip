@@ -1,0 +1,23 @@
+{
+  "name": "session-strip",
+  "version": "0.1.0",
+  "description": "Publishes each Claude Code session's synopsis (project, task, tools running) for an on-screen strip",
+  "userConfig": {
+    "useHaiku": {
+      "type": "boolean",
+      "title": "Summarize the task with Haiku",
+      "description": "Every few turns, one tiny Haiku call (~$0.0006) rewrites the task line. Off: the task is the first prompt, truncated.",
+      "default": true
+    },
+    "summarizeEvery": {
+      "type": "number",
+      "title": "Re-summarize every N turns",
+      "description": "The task line is first written after turn 1, then refreshed every N turns.",
+      "default": 3
+    }
+  },
+  "author": {
+    "name": "Taylor Burke"
+  },
+  "license": "MIT"
+}

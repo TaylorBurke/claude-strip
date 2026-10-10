@@ -1,0 +1,14 @@
+{
+  "name": "claude-strip",
+  "owner": {
+    "name": "Taylor Burke"
+  },
+  "plugins": [
+    {
+      "name": "session-strip",
+      "source": "./claude-mod",
+      "description": "Publishes each Claude Code session's synopsis for an on-screen strip"
+    }
+  ],
+  "description": "Per-window Claude Code session strip for Omarchy"
+}
