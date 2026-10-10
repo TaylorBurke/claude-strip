@@ -31,12 +31,14 @@ Item {
 
     // The right-hand badge: kept short and out of the title's way so a long
     // title is what gets elided in a narrow window.
-    function badge(s) {
-        if (s.phase === "waiting")
-            return "waiting for you";
+    function toolsText(s) {
         if (s.running > 0)
             return s.running + (s.running === 1 ? " tool running" : " tools running");
         return "";
+    }
+
+    function contextColor(pct) {
+        return pct >= 85 ? Color.urgent : Color.accent;
     }
 
     function dotColor(phase) {
@@ -154,24 +156,78 @@ Item {
                         font.pixelSize: Math.round(root.fontSize * 0.8)
                     }
 
-                    Text {
-                        id: badge
+                    // Right-hand status. While the agent waits on you it is only the red
+                    // "waiting for you"; otherwise the tool count and a context-fill bar.
+                    Row {
+                        id: status
+                        readonly property bool isWaiting: strip.modelData.phase === "waiting"
+                        readonly property int context: strip.modelData.context ?? -1
+                        readonly property int smallFont: Math.round(root.fontSize * 0.64)
+
                         anchors {
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
-                        textFormat: Text.PlainText
-                        text: root.badge(strip.modelData)
-                        color: strip.modelData.phase === "waiting" ? Color.urgent : Color.muted
-                        font.family: Style.fontFamily
-                        font.pixelSize: Math.round(root.fontSize * 0.64)
+                        spacing: 12
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: status.isWaiting
+                            textFormat: Text.PlainText
+                            text: "waiting for you"
+                            color: Color.urgent
+                            font.family: Style.fontFamily
+                            font.pixelSize: status.smallFont
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: !status.isWaiting && strip.modelData.running > 0
+                            textFormat: Text.PlainText
+                            text: root.toolsText(strip.modelData)
+                            color: Color.muted
+                            font.family: Style.fontFamily
+                            font.pixelSize: status.smallFont
+                        }
+
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: !status.isWaiting && status.context >= 0
+                            spacing: 8
+
+                            Rectangle {
+                                id: track
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.round(root.fontSize * 5.5)
+                                height: Math.round(root.fontSize * 0.55)
+                                radius: height / 2
+                                color: Qt.alpha(Color.foreground, 0.18)
+
+                                Rectangle {
+                                    width: Math.max(track.height, track.width * Math.min(status.context, 100) / 100)
+                                    height: parent.height
+                                    radius: height / 2
+                                    color: root.contextColor(status.context)
+                                    visible: status.context > 0
+                                }
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                textFormat: Text.PlainText
+                                text: status.context + "%"
+                                color: Color.muted
+                                font.family: Style.fontFamily
+                                font.pixelSize: status.smallFont
+                            }
+                        }
                     }
 
                     Text {
                         anchors {
                             left: dot.right
                             leftMargin: 10
-                            right: badge.text.length > 0 ? badge.left : parent.right
+                            right: status.width > 0 ? status.left : parent.right
                             rightMargin: 14
                             verticalCenter: parent.verticalCenter
                         }
@@ -193,7 +249,7 @@ Item {
                         bottom: parent.bottom
                     }
                     height: root.dividerHeight
-                    color: Qt.alpha(Color.foreground, 0.3)
+                    color: strip.modelData.phase === "waiting" ? Color.urgent : Qt.alpha(Color.foreground, 0.3)
                 }
 
                 // Hovering the strip shows the whole title, which a narrow window elides.

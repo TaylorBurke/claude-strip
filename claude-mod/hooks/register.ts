@@ -29,6 +29,8 @@ let turns = 0
 let recent: string[] = []
 let lastAnswer = ''
 let isSummarizing = false
+// Share of the context window in use, 0-100; -1 until the engine reports one.
+let contextPct = -1
 
 function squash(text: string, max: number): string {
   const flat = text.replace(/\s+/g, ' ').trim()
@@ -37,8 +39,17 @@ function squash(text: string, max: number): string {
 
 async function publish($: EngineInterface): Promise<void> {
   if (!file) return
-  const body = { pid, project, cwd, task, phase, running, turns, updatedAt: await $.clock.now() }
+  const body = { pid, project, cwd, task, phase, running, turns, context: contextPct, updatedAt: await $.clock.now() }
   await $.fs.write(file, JSON.stringify(body))
+}
+
+async function refreshContext($: EngineInterface): Promise<void> {
+  try {
+    const usage = await $.session.usage()
+    contextPct = typeof usage.context.percent === 'number' ? Math.round(usage.context.percent) : -1
+  } catch {
+    contextPct = -1
+  }
 }
 
 async function summarize($: EngineInterface): Promise<void> {
@@ -93,6 +104,7 @@ export const register: Register = (on, options) => {
       return await next(e)
     } finally {
       running = Math.max(0, running - 1)
+      await refreshContext($)
       // No event marks the person's approval, so waiting clears when the approved tool finishes.
       if (phase === 'waiting') phase = 'working'
       await publish($)
@@ -112,6 +124,7 @@ export const register: Register = (on, options) => {
     phase = 'idle'
     running = 0
     turns += 1
+    await refreshContext($)
     await publish($)
     if (turns === 1 || turns % every === 0) void summarize($)
     return next(e)

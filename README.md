@@ -8,7 +8,10 @@ you can tell your agents apart when several run side by side:
 ```
 
 The dot is accent-colored while the agent works, muted when idle, and urgent
-red when it is waiting on a permission prompt.
+red when it is waiting on a permission prompt. On the right, the strip shows
+the tool count and a bar for how full the context window is (it turns red
+above 85%). While the agent is waiting on you, the bar gives way to a red
+"waiting for you" and the divider line turns red too.
 
 It has two halves that talk through a small state file per session:
 

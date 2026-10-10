@@ -15,6 +15,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('turn.complete', () => ({ text: '' }) as never)
   on('classic.PermissionRequest', () => ({}) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, tokens: 124000, percent: 62 }, rateLimits: [] } }) as never)
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }) as never)
   on('process.run', () => ({ value: { exitCode: 0, stdout: `${PID}\n`, stderr: '' } }) as never)
   on('session.root', () => ({ value: '/home/ww/Work/native-cards' }))
@@ -83,6 +84,18 @@ test('turn.complete goes idle and Haiku rewrites the task after turn 1', async (
   expect(world.models[0]).toContain('ota paths are broken')
   expect(world.models[0]).toContain('Found the stale asset manifest')
   expect(world.last()).toMatchObject({ phase: 'idle', turns: 1, task: 'fixing OTA asset paths' })
+})
+
+test('the context fill is published after a turn', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(world.last()).toMatchObject({ context: -1 })
+
+  await $.prompt.submit({ text: 'go' })
+  await $.turn.complete({ reason: 'answer', answer: 'done' } as never)
+  await world.clock.advance(0)
+
+  expect(world.last()).toMatchObject({ context: 62 })
 })
 
 test('a subagent turn does not count or trigger a summary', async ($, on) => {
