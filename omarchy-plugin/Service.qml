@@ -21,9 +21,11 @@ Item {
     readonly property int borderSize: 2    // Hyprland window border
     // Sizes follow the system font size (Style.fontScale = base-size / 12), so a
     // user with larger or smaller system text gets a proportionally taller strip.
-    readonly property int fontSize: Math.round(18 * Style.fontScale)
+    readonly property int fontSize: Math.round(14 * Style.fontScale)
     readonly property int dividerHeight: 2
-    readonly property int stripHeight: Math.round(fontSize * 1.6) + dividerHeight
+    // The box is sized for 18px text; the smaller title is centered in it, which
+    // leaves a little breathing room above and below.
+    readonly property int stripHeight: Math.round(18 * Style.fontScale * 1.6) + dividerHeight
 
     readonly property string scanScript: Qt.resolvedUrl("scan.py").toString().replace("file://", "")
 
@@ -99,9 +101,14 @@ Item {
         PanelWindow {
             id: strip
             required property var modelData
+            property bool tipOpen: false
 
-            screen: Quickshell.screens.find(s => s.name === modelData.monitor) ?? null
-            visible: screen !== null
+            // Resolved separately: binding visible to screen (which a visible
+            // surface also sets) is a binding loop.
+            readonly property var targetScreen: Quickshell.screens.find(s => s.name === modelData.monitor) ?? null
+
+            screen: targetScreen
+            visible: targetScreen !== null
 
             anchors {
                 top: true
@@ -118,7 +125,6 @@ Item {
             WlrLayershell.namespace: "claude-strip"
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
-            mask: Region {}
 
             Rectangle {
                 anchors.fill: parent
@@ -188,6 +194,78 @@ Item {
                     }
                     height: root.dividerHeight
                     color: Qt.alpha(Color.foreground, 0.3)
+                }
+
+                // Hovering the strip shows the whole title, which a narrow window elides.
+                MouseArea {
+                    id: hover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.NoButton
+                    onContainsMouseChanged: {
+                        if (containsMouse)
+                            tipDelay.restart();
+                        else {
+                            tipDelay.stop();
+                            strip.tipOpen = false;
+                        }
+                    }
+                }
+
+                Timer {
+                    id: tipDelay
+                    interval: 350
+                    onTriggered: strip.tipOpen = hover.containsMouse
+                }
+            }
+
+            PopupWindow {
+                id: tip
+                readonly property int maxWidth: Math.max(200, strip.width - 2 * root.padding)
+                readonly property int bubblePadding: 10
+
+                visible: strip.tipOpen && strip.modelData.task.length > 0
+                color: "transparent"
+                implicitWidth: Math.ceil(Math.min(metrics.width, maxWidth - 2 * bubblePadding)) + 2 * bubblePadding + 2
+                implicitHeight: Math.ceil(label.implicitHeight) + 2 * bubblePadding + 2
+
+                anchor {
+                    window: strip
+                    rect.x: root.padding
+                    rect.y: strip.height + 4
+                    rect.width: 1
+                    rect.height: 1
+                    edges: Edges.Top | Edges.Left
+                    gravity: Edges.Bottom | Edges.Right
+                    adjustment: PopupAdjustment.Slide
+                }
+
+                TextMetrics {
+                    id: metrics
+                    font.family: Style.fontFamily
+                    font.pixelSize: Style.font.body
+                    text: strip.modelData.task
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: Color.tooltip.background
+                    border.color: Color.tooltip.border
+                    border.width: 1
+                    radius: Style.cornerRadius
+
+                    Text {
+                        id: label
+                        x: tip.bubblePadding + 1
+                        y: tip.bubblePadding + 1
+                        width: parent.width - 2 * (tip.bubblePadding + 1)
+                        textFormat: Text.PlainText
+                        text: strip.modelData.task
+                        color: Color.tooltip.text
+                        wrapMode: Text.WordWrap
+                        font.family: Style.fontFamily
+                        font.pixelSize: Style.font.body
+                    }
                 }
             }
         }

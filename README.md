@@ -21,7 +21,8 @@ The strip is terminal-agnostic: each session is matched to its Hyprland window
 by walking the process tree, so foot, Alacritty, kitty and ghostty all work.
 It is a header in the theme's background color with a 2px divider line below
 it, drawn over the top of the window, so it covers the first one or two
-terminal rows. Its text size follows your system font size.
+terminal rows. Its text size follows your system font size, and hovering the
+strip shows the full title in a tooltip when a narrow window elides it.
 
 ## Install
 
@@ -102,6 +103,8 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 - **Waiting state clears late.** Claude Code has no event for the moment you
   approve a permission prompt, so the red "waiting for you" state clears when
   the approved tool finishes.
+- **The strip takes the mouse.** It is no longer click-through (hover needs
+  input); it only covers terminal rows you could not see anyway.
 - **Always on top.** The strip is a layer-shell surface, so a floating window
   dragged over a Claude window is drawn beneath it.
 - **Hyprland only.** Window lookup uses `hyprctl`.
