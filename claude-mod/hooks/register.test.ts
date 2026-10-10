@@ -45,12 +45,21 @@ test('a prompt marks the session working and seeds the task from it', async ($, 
   expect(world.last()).toMatchObject({ phase: 'working', task: 'fix the OTA asset paths please' })
 })
 
-test('a long first prompt is truncated for the strip', async ($, on) => {
+test('a normal-length first prompt is stored whole, not cut for the strip', async ($, on) => {
   const world = engine(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  await $.prompt.submit({ text: 'x'.repeat(200) })
+  const prompt = 'fix the OTA asset paths so renamed folders stop blanking cards on the Android preview build'
+  await $.prompt.submit({ text: prompt })
 
-  expect(String(world.last()?.task).length).toBeLessThanOrEqual(100)
+  expect(world.last()?.task).toBe(prompt)
+})
+
+test('an enormous first prompt is capped so the state file stays small', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'x'.repeat(1000) })
+
+  expect(String(world.last()?.task).length).toBeLessThanOrEqual(240)
   expect(String(world.last()?.task).endsWith('…')).toBe(true)
 })
 

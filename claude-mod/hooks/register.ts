@@ -5,7 +5,8 @@ type Phase = 'idle' | 'working' | 'waiting' | 'ended'
 const MAX_RECENT = 4
 const MAX_PROMPT_CHARS = 300
 const MAX_ANSWER_CHARS = 500
-const MAX_TASK_CHARS = 100
+// A safety cap only: titles are stored whole and the strip trims to fit its width.
+const MAX_TASK_CHARS = 240
 
 const SYSTEM =
   'You write the title shown in a header strip above a coding session, so someone ' +
