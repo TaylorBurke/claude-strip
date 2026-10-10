@@ -19,13 +19,17 @@ It has two halves that talk through a small state file per session:
 
 The strip is terminal-agnostic: each session is matched to its Hyprland window
 by walking the process tree, so foot, Alacritty, kitty and ghostty all work.
-It is a 36px header in the theme's background color with a thin divider line
-below it, drawn over the top of the window, so it covers the first one or two
-terminal rows.
+It is a header in the theme's background color with a 2px divider line below
+it, drawn over the top of the window, so it covers the first one or two
+terminal rows. Its text size follows your system font size.
 
 ## Install
 
 Requires Omarchy (Hyprland + Quickshell shell), Python 3, and Claude Code.
+
+> **Two installs.** The Omarchy plugin only draws the strip; the
+> `session-strip` Claude Code mod (step 2) is what produces the session
+> information it shows. Without the mod you get no strip at all.
 
 1. The Omarchy plugin:
 
@@ -62,9 +66,11 @@ Mod options (Claude Code config menu):
   title is the first prompt, truncated.
 - **Re-summarize every N turns** (default 3).
 
-The strip's size lives at the top of `omarchy-plugin/Service.qml`:
-`fontSize` (25, 2.5x a 10pt terminal), `stripHeight` (36), `padding` and
-`borderSize`. Long titles are elided on the right in narrow windows.
+The strip's size lives at the top of `omarchy-plugin/Service.qml`. `fontSize`
+is 18px at the default 12px system font and scales with Omarchy's font
+setting (`Style.fontScale`); `stripHeight`, `dividerHeight`, `padding` and
+`borderSize` can be changed there too. Long titles are elided on the right in
+narrow windows.
 
 ## How it works
 
@@ -96,6 +102,8 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 - **Waiting state clears late.** Claude Code has no event for the moment you
   approve a permission prompt, so the red "waiting for you" state clears when
   the approved tool finishes.
+- **Always on top.** The strip is a layer-shell surface, so a floating window
+  dragged over a Claude window is drawn beneath it.
 - **Hyprland only.** Window lookup uses `hyprctl`.
 - **Window-per-session.** Tabs and multiplexers (tmux panes) share one window,
   so only one session per window is shown.

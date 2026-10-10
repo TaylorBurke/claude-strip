@@ -1,6 +1,6 @@
 {
   "name": "session-strip",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Publishes each Claude Code session's synopsis (project, task, tools running) for an on-screen strip",
   "userConfig": {
     "useHaiku": {

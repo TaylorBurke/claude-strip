@@ -16,11 +16,14 @@ Item {
 
     // An opaque header drawn over the top of the terminal window, in the theme's
     // background color, so it reads as part of the window. It covers the top
-    // 1-2 terminal rows; raise or lower stripHeight/fontSize to taste.
+    // 1-2 terminal rows.
     readonly property int padding: 14      // left inset, matches foot's pad=14x14
     readonly property int borderSize: 2    // Hyprland window border
-    readonly property int fontSize: 25     // 2.5x the terminal's own text
-    readonly property int stripHeight: 36  // includes the 1px divider line
+    // Sizes follow the system font size (Style.fontScale = base-size / 12), so a
+    // user with larger or smaller system text gets a proportionally taller strip.
+    readonly property int fontSize: Math.round(18 * Style.fontScale)
+    readonly property int dividerHeight: 2
+    readonly property int stripHeight: Math.round(fontSize * 1.6) + dividerHeight
 
     readonly property string scanScript: Qt.resolvedUrl("scan.py").toString().replace("file://", "")
 
@@ -146,21 +149,6 @@ Item {
                     }
 
                     Text {
-                        id: project
-                        anchors {
-                            left: dot.right
-                            leftMargin: 10
-                            verticalCenter: parent.verticalCenter
-                        }
-                        textFormat: Text.PlainText
-                        text: strip.modelData.project
-                        color: Color.foreground
-                        font.family: Style.fontFamily
-                        font.pixelSize: root.fontSize
-                        font.bold: true
-                    }
-
-                    Text {
                         id: badge
                         anchors {
                             right: parent.right
@@ -175,15 +163,15 @@ Item {
 
                     Text {
                         anchors {
-                            left: project.right
+                            left: dot.right
                             leftMargin: 10
                             right: badge.text.length > 0 ? badge.left : parent.right
                             rightMargin: 14
                             verticalCenter: parent.verticalCenter
                         }
                         textFormat: Text.PlainText
-                        text: strip.modelData.task ? "· " + strip.modelData.task : ""
-                        color: Qt.alpha(Color.foreground, 0.8)
+                        text: strip.modelData.task
+                        color: Color.foreground
                         elide: Text.ElideRight
                         font.family: Style.fontFamily
                         font.pixelSize: root.fontSize
@@ -198,7 +186,7 @@ Item {
                         right: parent.right
                         bottom: parent.bottom
                     }
-                    height: 1
+                    height: root.dividerHeight
                     color: Qt.alpha(Color.foreground, 0.3)
                 }
             }
