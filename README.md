@@ -38,6 +38,17 @@ Requires Omarchy (Hyprland + Quickshell shell), Python 3, and Claude Code.
    /plugin install session-strip --marketplace TaylorBurke/claude-strip
    ```
 
+## Uninstall
+
+```sh
+omarchy plugin remove taylorburke.claude-strip
+claude plugin uninstall session-strip
+rm -rf "$XDG_RUNTIME_DIR/claude-strip"    # optional: leftover state files
+```
+
+Neither half edits your shell, Hyprland or terminal configuration. The plugin
+only adds itself to the plugin list in `shell.json` when you enable it.
+
 ## Configuration
 
 Mod options (Claude Code config menu):
