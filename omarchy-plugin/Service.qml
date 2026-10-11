@@ -32,6 +32,7 @@ Item {
     readonly property int stripHeight: Math.round(18 * Style.fontScale * 1.6) + dividerHeight
 
     readonly property string followScript: Qt.resolvedUrl("follow.py").toString().replace("file://", "")
+    readonly property string geometryScript: Qt.resolvedUrl("geometry.py").toString().replace("file://", "")
     readonly property string modSetupScript: Qt.resolvedUrl("mod_setup.py").toString().replace("file://", "")
     readonly property string scanScript: Qt.resolvedUrl("scan.py").toString().replace("file://", "")
 
@@ -99,6 +100,35 @@ Item {
         onTriggered: root.scanNow()
     }
 
+    // Window geometry (address -> {x, y, w}, global) streamed by geometry.py, which
+    // samples Hyprland every frame while a window is resizing; it beats waiting for a scan.
+    property var geo: ({})
+
+    Process {
+        id: geometryWatch
+        running: true
+        command: ["python3", "-I", root.geometryScript]
+        stdout: SplitParser {
+            onRead: line => {
+                const p = line.split(" ");
+                const n = p.slice(1).map(Number);
+                if (p.length === 5 && n.every(v => !isNaN(v)))
+                    root.geo = Object.assign({}, root.geo, { [p[0]]: { x: n[0], y: n[1], w: n[2] } });
+            }
+        }
+        // Hyprland restarting ends the stream; try again shortly.
+        onRunningChanged: {
+            if (!running)
+                geometryRetry.start();
+        }
+    }
+
+    Timer {
+        id: geometryRetry
+        interval: 2000
+        onTriggered: geometryWatch.running = true
+    }
+
     Timer {
         id: debounce
         interval: 40
@@ -125,6 +155,8 @@ Item {
             // While the strip is dragged, follow.py reports the window's real geometry
             // (global x y w h) many times a second, which beats waiting for the next scan.
             property var live: null
+            // The latest geometry: the drag's, else the streamed one, else the scan's.
+            readonly property var frame: live ?? root.geo[info.address] ?? null
             // scan.py reports the terminal's font size in points; same size as the
             // terminal's own text (96 dpi), so the strip reads as part of the session.
             readonly property int fontPx: Math.round((info.fontPt ?? 10) * 96 / 72)
@@ -143,10 +175,10 @@ Item {
                 left: true
             }
             margins {
-                left: (live ? live.x - info.mx : info.x) + root.borderSize
-                top: (live ? live.y - info.my : info.y) + root.borderSize
+                left: (frame ? frame.x - info.mx : info.x) + root.borderSize
+                top: (frame ? frame.y - info.my : info.y) + root.borderSize
             }
-            implicitWidth: Math.max(0, (live ? live.w : info.w) - 2 * root.borderSize)
+            implicitWidth: Math.max(0, (frame ? frame.w : info.w) - 2 * root.borderSize)
             implicitHeight: root.stripHeight
 
             WlrLayershell.layer: WlrLayer.Top

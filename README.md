@@ -99,7 +99,9 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 
 - **Runs:** `python3 -I omarchy-plugin/scan.py` once a second and on Hyprland
   events, which in turn runs `hyprctl clients -j` and `hyprctl monitors -j`.
-  While you drag a strip, `follow.py` talks to Hyprland's socket to float, move
+  A long-lived `geometry.py` reads Hyprland's event and command sockets
+  (read-only) and reports window positions, so strips follow resizes frame by
+  frame. While you drag a strip, `follow.py` talks to Hyprland's socket to float, move
   and re-tile that one window. At load, `mod_setup.py check` runs
   `claude plugin list` and, only if the mod is missing, sends a notification; on
   your click it runs `claude plugin marketplace add TaylorBurke/claude-strip`
