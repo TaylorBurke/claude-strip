@@ -89,7 +89,28 @@ def window_for(pid, clients_by_pid):
     return None
 
 
+def recover_drags():
+    """Re-tile windows left floating by a strip drag whose follow.py died (see follow.py)."""
+    for path in glob.glob(os.path.join(STATE_DIR, "drag-*.pending")):
+        try:
+            with open(path) as f:
+                pid = int(f.read().strip())
+        except (OSError, ValueError):
+            pid = 0
+        if pid and os.path.exists(f"/proc/{pid}"):
+            continue
+        address = os.path.basename(path)[len("drag-"):-len(".pending")]
+        if re.fullmatch(r"0x[0-9a-f]+", address):
+            call = f'hl.dsp.window.float({{ action = "disable", window = "address:{address}" }})'
+            subprocess.run(["hyprctl", "dispatch", call], check=False, timeout=3, stdout=subprocess.DEVNULL)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def main():
+    recover_drags()
     files = glob.glob(os.path.join(STATE_DIR, "*.json"))
     if not files:
         print("[]")
@@ -128,6 +149,8 @@ def main():
             monitor=mon["name"],
             x=win["at"][0] - mon["x"],
             y=win["at"][1] - mon["y"],
+            mx=mon["x"],
+            my=mon["y"],
             w=win["size"][0],
             h=win["size"][1],
             fontPt=terminal_font_pt(win["pid"]),

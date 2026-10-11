@@ -13,6 +13,12 @@ Item {
 
     property var shell: null
     property var sessions: []
+    readonly property var byPid: {
+        const m = {};
+        for (const s of sessions)
+            m[s.pid] = s;
+        return m;
+    }
 
     // An opaque header drawn over the top of the terminal window, in the theme's
     // background color, so it reads as part of the window. It covers the top
@@ -25,6 +31,8 @@ Item {
     // The box is sized for 18px text; the terminal-sized title is centered in it.
     readonly property int stripHeight: Math.round(18 * Style.fontScale * 1.6) + dividerHeight
 
+    readonly property string followScript: Qt.resolvedUrl("follow.py").toString().replace("file://", "")
+    readonly property string modSetupScript: Qt.resolvedUrl("mod_setup.py").toString().replace("file://", "")
     readonly property string scanScript: Qt.resolvedUrl("scan.py").toString().replace("file://", "")
 
     // The right-hand badge: kept short and out of the title's way so a long
@@ -49,6 +57,15 @@ Item {
         if (!scan.running)
             scan.running = true;
     }
+
+    // The strip needs the session-strip Claude Code mod. If it is missing, ask (never
+    // installing without a click on the notification), at most once a week.
+    Process {
+        id: modCheck
+        command: ["python3", "-I", root.modSetupScript, "check"]
+    }
+
+    Component.onCompleted: modCheck.running = true
 
     Process {
         id: scan
@@ -96,32 +113,40 @@ Item {
     }
 
     Variants {
-        model: root.sessions
+        model: root.sessions.map(s => s.pid)
 
         PanelWindow {
             id: strip
+            // The model is just each session's pid, so a window moving (which changes its
+            // geometry on every scan) does not recreate the strip, and with it a drag in progress.
             required property var modelData
+            readonly property var info: root.byPid[modelData] ?? ({ task: "", phase: "idle", running: 0, x: 0, y: 0, w: 0, mx: 0, my: 0, monitor: "", address: "" })
             property bool tipOpen: false
+            // While the strip is dragged, follow.py reports the window's real geometry
+            // (global x y w h) many times a second, which beats waiting for the next scan.
+            property var live: null
             // scan.py reports the terminal's font size in points; same size as the
             // terminal's own text (96 dpi), so the strip reads as part of the session.
-            readonly property int fontPx: Math.round((modelData.fontPt ?? 10) * 96 / 72)
+            readonly property int fontPx: Math.round((info.fontPt ?? 10) * 96 / 72)
 
             // Resolved separately: binding visible to screen (which a visible
             // surface also sets) is a binding loop.
-            readonly property var targetScreen: Quickshell.screens.find(s => s.name === modelData.monitor) ?? null
+            readonly property var targetScreen: Quickshell.screens.find(s => s.name === info.monitor) ?? null
 
             screen: targetScreen
-            visible: targetScreen !== null
+            // A fresh session has no task yet; leaving the strip off keeps Claude's
+            // startup banner (and its mascot) visible until the first prompt.
+            visible: targetScreen !== null && info.task.length > 0
 
             anchors {
                 top: true
                 left: true
             }
             margins {
-                left: modelData.x + root.borderSize
-                top: modelData.y + root.borderSize
+                left: (live ? live.x - info.mx : info.x) + root.borderSize
+                top: (live ? live.y - info.my : info.y) + root.borderSize
             }
-            implicitWidth: Math.max(0, modelData.w - 2 * root.borderSize)
+            implicitWidth: Math.max(0, (live ? live.w : info.w) - 2 * root.borderSize)
             implicitHeight: root.stripHeight
 
             WlrLayershell.layer: WlrLayer.Top
@@ -152,7 +177,7 @@ Item {
                         }
                         textFormat: Text.PlainText
                         text: "●"
-                        color: root.dotColor(strip.modelData.phase)
+                        color: root.dotColor(strip.info.phase)
                         font.family: Style.fontFamily
                         font.pixelSize: Math.round(strip.fontPx * 0.8)
                     }
@@ -161,8 +186,8 @@ Item {
                     // "waiting for you"; otherwise the tool count and a context-fill bar.
                     Row {
                         id: status
-                        readonly property bool isWaiting: strip.modelData.phase === "waiting"
-                        readonly property int context: strip.modelData.context ?? -1
+                        readonly property bool isWaiting: strip.info.phase === "waiting"
+                        readonly property int context: strip.info.context ?? -1
                         readonly property int smallFont: Math.round(strip.fontPx * 0.85)
 
                         anchors {
@@ -183,9 +208,9 @@ Item {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: !status.isWaiting && strip.modelData.running > 0
+                            visible: !status.isWaiting && strip.info.running > 0
                             textFormat: Text.PlainText
-                            text: root.toolsText(strip.modelData)
+                            text: root.toolsText(strip.info)
                             color: Color.muted
                             font.family: Style.fontFamily
                             font.pixelSize: status.smallFont
@@ -225,6 +250,7 @@ Item {
                     }
 
                     Text {
+                        id: title
                         anchors {
                             left: dot.right
                             leftMargin: 10
@@ -233,7 +259,7 @@ Item {
                             verticalCenter: parent.verticalCenter
                         }
                         textFormat: Text.PlainText
-                        text: strip.modelData.task
+                        text: strip.info.task
                         color: Color.foreground
                         elide: Text.ElideRight
                         font.family: Style.fontFamily
@@ -250,21 +276,57 @@ Item {
                         bottom: parent.bottom
                     }
                     height: root.dividerHeight
-                    color: strip.modelData.phase === "waiting" ? Color.urgent : Qt.alpha(Color.foreground, 0.3)
+                    color: strip.info.phase === "waiting" ? Color.urgent : Qt.alpha(Color.foreground, 0.3)
                 }
 
-                // Hovering the strip shows the whole title, which a narrow window elides.
+                // Hovering the strip shows the whole title, but only when the window elides it.
                 MouseArea {
                     id: hover
                     anchors.fill: parent
                     hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
+                    acceptedButtons: Qt.LeftButton
+
+                    // Dragging the strip moves its window, live: follow.py runs while the mouse
+                    // is held, so a floating window tracks the cursor and a tiled one swaps with
+                    // each window the cursor enters. (A layer surface cannot hand a drag to
+                    // Hyprland's own, so this reproduces it.)
+                    property point pressAt: Qt.point(0, 0)
+
+                    onPressed: mouse => {
+                        pressAt = Qt.point(mouse.x, mouse.y);
+                    }
+                    onPositionChanged: mouse => {
+                        if (pressed && !follow.running && Math.hypot(mouse.x - pressAt.x, mouse.y - pressAt.y) >= 8) {
+                            strip.tipOpen = false;
+                            follow.running = true;
+                        }
+                    }
+                    onReleased: follow.write("stop\n")
+                    onCanceled: follow.write("stop\n")
+
                     onContainsMouseChanged: {
                         if (containsMouse)
                             tipDelay.restart();
                         else {
                             tipDelay.stop();
                             strip.tipOpen = false;
+                        }
+                    }
+
+                    Process {
+                        id: follow
+                        stdinEnabled: true
+                        command: ["python3", "-I", root.followScript, strip.info.address]
+                        stdout: SplitParser {
+                            onRead: line => {
+                                const p = line.split(" ").map(Number);
+                                if (p.length === 4 && p.every(n => !isNaN(n)))
+                                    strip.live = { x: p[0], y: p[1], w: p[2] };
+                            }
+                        }
+                        onRunningChanged: {
+                            if (!running)
+                                strip.live = null;
                         }
                     }
                 }
@@ -281,7 +343,7 @@ Item {
                 readonly property int maxWidth: Math.max(200, strip.width - 2 * root.padding)
                 readonly property int bubblePadding: 10
 
-                visible: strip.tipOpen && strip.modelData.task.length > 0
+                visible: strip.tipOpen && title.truncated
                 color: "transparent"
                 implicitWidth: Math.ceil(Math.min(metrics.width, maxWidth - 2 * bubblePadding)) + 2 * bubblePadding + 2
                 implicitHeight: Math.ceil(label.implicitHeight) + 2 * bubblePadding + 2
@@ -301,7 +363,7 @@ Item {
                     id: metrics
                     font.family: Style.fontFamily
                     font.pixelSize: Style.font.body
-                    text: strip.modelData.task
+                    text: strip.info.task
                 }
 
                 Rectangle {
@@ -317,7 +379,7 @@ Item {
                         y: tip.bubblePadding + 1
                         width: parent.width - 2 * (tip.bubblePadding + 1)
                         textFormat: Text.PlainText
-                        text: strip.modelData.task
+                        text: strip.info.task
                         color: Color.tooltip.text
                         wrapMode: Text.WordWrap
                         font.family: Style.fontFamily

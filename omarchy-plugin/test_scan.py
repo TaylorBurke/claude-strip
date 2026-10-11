@@ -48,3 +48,22 @@ class WindowFor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecoverDrags(unittest.TestCase):
+    def test_retiles_a_window_whose_follower_died(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(scan, "STATE_DIR", d), \
+                mock.patch.object(scan.subprocess, "run") as run:
+            dead = os.path.join(d, "drag-0xabc123.pending")
+            alive = os.path.join(d, "drag-0xdef456.pending")
+            with open(dead, "w") as f:
+                f.write(str(2**22 + 12345))
+            with open(alive, "w") as f:
+                f.write(str(os.getpid()))
+            scan.recover_drags()
+            self.assertEqual(run.call_count, 1)
+            self.assertIn("address:0xabc123", run.call_args[0][0][-1])
+            self.assertFalse(os.path.exists(dead))
+            self.assertTrue(os.path.exists(alive))

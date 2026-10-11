@@ -27,28 +27,34 @@ by walking the process tree, so foot, Alacritty, kitty and ghostty all work.
 It is a header in the theme's background color with a 2px divider line below
 it, drawn over the top of the window, so it covers the first one or two
 terminal rows. Its text is the same size as the terminal's own text (read from the
-terminal's config: foot, Alacritty, kitty and ghostty are supported), and hovering the
-strip shows the full title in a tooltip when a narrow window elides it.
+terminal's config: foot, Alacritty, kitty and ghostty are supported). Hovering the
+strip shows the full title in a tooltip, but only when a narrow window elides it.
+
+A new session shows no strip until you send its first prompt, so Claude Code's
+startup banner stays fully visible.
+
+**Drag the strip to move its window.** A floating window follows the cursor. A
+tiled window lifts out of the layout while you hold it and is re-tiled where you
+drop it, on the side of the window under the cursor, like Hyprland's own drag.
 
 ## Install
 
 Requires Omarchy (Hyprland + Quickshell shell), Python 3, and Claude Code.
 
-> **Two installs.** The Omarchy plugin only draws the strip; the
-> `session-strip` Claude Code mod (step 2) is what produces the session
-> information it shows. Without the mod you get no strip at all.
+```sh
+omarchy plugin add https://github.com/TaylorBurke/claude-strip --enable
+```
 
-1. The Omarchy plugin:
+The strip is driven by the `session-strip` Claude Code mod. If the mod is not
+installed, the plugin shows a notification offering to install it (at most once a
+week); nothing is installed unless you click it. To install it yourself instead,
+type this at a Claude Code prompt:
 
-   ```sh
-   omarchy plugin add https://github.com/TaylorBurke/claude-strip --enable
-   ```
+```
+/plugin install session-strip --marketplace TaylorBurke/claude-strip
+```
 
-2. The Claude Code mod, typed at a Claude Code prompt:
-
-   ```
-   /plugin install session-strip --marketplace TaylorBurke/claude-strip
-   ```
+Open Claude Code sessions need `/reload-plugins` (or a restart) to pick the mod up.
 
 ## Uninstall
 
@@ -85,7 +91,7 @@ The mod writes `$XDG_RUNTIME_DIR/claude-strip/<claude-pid>.json` on prompt,
 tool, permission and turn events. `scan.py` joins those files with
 `hyprctl clients`, places each session relative to its monitor, and deletes
 files whose process has died. `Service.qml` re-runs it on every Hyprland event
-and once a second, and draws one click-through layer-shell strip per session.
+and once a second, and draws one layer-shell strip per session.
 
 ## Dependencies and privileges
 
@@ -93,10 +99,18 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 
 - **Runs:** `python3 -I omarchy-plugin/scan.py` once a second and on Hyprland
   events, which in turn runs `hyprctl clients -j` and `hyprctl monitors -j`.
+  While you drag a strip, `follow.py` talks to Hyprland's socket to float, move
+  and re-tile that one window. At load, `mod_setup.py check` runs
+  `claude plugin list` and, only if the mod is missing, sends a notification; on
+  your click it runs `claude plugin marketplace add TaylorBurke/claude-strip`
+  and `claude plugin install session-strip@claude-strip`.
 - **Reads:** `/proc/<pid>/stat` (to walk parent processes) and the state files
   in `$XDG_RUNTIME_DIR/claude-strip/`.
 - **Writes/deletes:** only state files in that directory, and only stale ones
   (dead process or ended session). The mod writes them; the plugin deletes them.
+  A drag leaves a short-lived `drag-*.pending` marker there so a window is
+  re-tiled if the drag is interrupted, and the install prompt touches
+  `$XDG_STATE_HOME/claude-strip/mod-prompted` to ask at most weekly.
 - **Network:** none from the plugin. The mod's optional Haiku call goes through
   Claude Code's own client, like any other turn.
 - **No root, no installers, no second Quickshell process.**
@@ -109,7 +123,7 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 - **Waiting state clears late.** Claude Code has no event for the moment you
   approve a permission prompt, so the red "waiting for you" state clears when
   the approved tool finishes.
-- **The strip takes the mouse.** It is no longer click-through (hover needs
+- **The strip takes the mouse.** It is not click-through (hover and drag need
   input); it only covers terminal rows you could not see anyway.
 - **Always on top.** The strip is a layer-shell surface, so a floating window
   dragged over a Claude window is drawn beneath it.
@@ -121,7 +135,7 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 
 ```sh
 claude plugin test claude-mod                       # mod tests
-(cd omarchy-plugin && python3 -m unittest -q test_scan)
+(cd omarchy-plugin && python3 -m unittest -q test_scan test_follow test_mod_setup)
 claude plugin validate .                            # mod + marketplace
 omarchy plugin validate .                           # Omarchy manifest
 ```
