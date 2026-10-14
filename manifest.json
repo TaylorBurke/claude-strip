@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "taylorburke.claude-strip",
   "name": "Claude Strip",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": "Taylor Burke",
   "license": "MIT",
   "description": "A thin strip at the top of each terminal window running Claude Code, showing the session's project, task and running tools. Terminal-agnostic; pair with the session-strip Claude Code mod.",

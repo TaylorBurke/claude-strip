@@ -103,6 +103,31 @@ Item {
     // Window geometry (address -> {x, y, w}, global) streamed by geometry.py, which
     // samples Hyprland every frame while a window is resizing; it beats waiting for a scan.
     property var geo: ({})
+    // Addresses whose window changed size within the last resizeSettle ms. A strip
+    // hides while its window is resizing (trailing the edge looks laggy) and comes
+    // back once the size has held still.
+    property var resizing: ({})
+    property var resizedAt: ({})
+    readonly property int resizeSettle: 150
+
+    Timer {
+        id: resizeSettled
+        interval: root.resizeSettle
+        onTriggered: {
+            const now = Date.now();
+            const still = {};
+            let any = false;
+            for (const a in root.resizing) {
+                if (now - root.resizedAt[a] < root.resizeSettle) {
+                    still[a] = true;
+                    any = true;
+                }
+            }
+            root.resizing = still;
+            if (any)
+                resizeSettled.restart();
+        }
+    }
 
     Process {
         id: geometryWatch
@@ -112,8 +137,15 @@ Item {
             onRead: line => {
                 const p = line.split(" ");
                 const n = p.slice(1).map(Number);
-                if (p.length === 5 && n.every(v => !isNaN(v)))
-                    root.geo = Object.assign({}, root.geo, { [p[0]]: { x: n[0], y: n[1], w: n[2] } });
+                if (p.length === 5 && n.every(v => !isNaN(v))) {
+                    const before = root.geo[p[0]];
+                    if (before && (before.w !== n[2] || before.h !== n[3])) {
+                        root.resizedAt[p[0]] = Date.now();
+                        root.resizing = Object.assign({}, root.resizing, { [p[0]]: true });
+                        resizeSettled.restart();
+                    }
+                    root.geo = Object.assign({}, root.geo, { [p[0]]: { x: n[0], y: n[1], w: n[2], h: n[3] } });
+                }
             }
         }
         // Hyprland restarting ends the stream; try again shortly.
@@ -168,7 +200,10 @@ Item {
             screen: targetScreen
             // A fresh session has no task yet; leaving the strip off keeps Claude's
             // startup banner (and its mascot) visible until the first prompt.
-            visible: targetScreen !== null && info.task.length > 0
+            // Not while its window is resizing, except during the strip's own drag: hiding
+            // the surface under a held mouse button would cancel the drag.
+            readonly property bool resizeHidden: (root.resizing[info.address] ?? false) && live === null && !follow.running
+            visible: targetScreen !== null && info.task.length > 0 && !resizeHidden
 
             anchors {
                 top: true
