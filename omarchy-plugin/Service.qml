@@ -22,7 +22,7 @@ Item {
 
     // An opaque header drawn over the top of the terminal window, in the theme's
     // background color, so it reads as part of the window. It covers the top
-    // 1-2 terminal rows.
+    // 1-2 terminal rows unless the terminal has ~44px of top padding (README, "Top padding").
     readonly property int padding: 14      // left inset, matches foot's pad=14x14
     readonly property int borderSize: 2    // Hyprland window border
     // The bar's height follows the system font size (Style.fontScale = base-size / 12).

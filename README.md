@@ -25,8 +25,9 @@ It has two halves that talk through a small state file per session:
 The strip is terminal-agnostic: each session is matched to its Hyprland window
 by walking the process tree, so foot, Alacritty, kitty and ghostty all work.
 It is a header in the theme's background color with a 2px divider line below
-it, drawn over the top of the window, so it covers the first one or two
-terminal rows. Its text is the same size as the terminal's own text (read from the
+it, drawn over the top of the window. With a terminal's usual small padding it
+covers the first one or two terminal rows; give Claude windows real top padding
+(see [Top padding](#top-padding)) and it sits in empty space instead. Its text is the same size as the terminal's own text (read from the
 terminal's config: foot, Alacritty, kitty and ghostty are supported). Hovering the
 strip shows the full title in a tooltip, but only when a narrow window elides it.
 
@@ -84,6 +85,33 @@ matches the session text. Its height follows Omarchy's system font setting
 (`Style.fontScale`); `dividerHeight`, `padding` and `borderSize` sit at the top
 of `omarchy-plugin/Service.qml`. Long titles are elided on the right in narrow
 windows.
+
+### Top padding
+
+The strip is 31px tall at Omarchy's default font size and starts 2px inside the
+window, so a terminal needs about 44px of top padding for the strip to cover
+nothing. The plugin never edits terminal configuration, so this is yours to set.
+
+For foot (1.28+, which takes per-side padding), this wrapper pads only the
+windows Omarchy's agent launcher opens (`--app-id=org.omarchy.agent`) and leaves
+every other terminal alone. Save it as `~/.local/bin/foot-agent-pad` and make it
+executable:
+
+```sh
+#!/bin/bash
+for arg in "$@"; do
+  if [[ $arg == --app-id=org.omarchy.agent ]]; then
+    exec /usr/bin/foot -o "main.pad=14x${CLAUDE_STRIP_TOP_PAD:-44}x14x14" "$@"
+  fi
+done
+exec /usr/bin/foot "$@"
+```
+
+Then point the first `Exec=` line of `~/.local/share/applications/foot.desktop`
+at it (full path), keeping the rest of the entry as it is. New agent windows
+pick it up; open ones keep their old padding. Claude started by hand in a plain
+terminal is not padded. To pad every foot window instead, set
+`pad=14x44x14x14` in `foot.ini`.
 
 ## How it works
 
