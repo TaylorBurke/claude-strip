@@ -11,6 +11,8 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   const writes: Written[] = []
   let sessionId = SESSION
   const models: string[] = []
+  const systems: string[] = []
+  let transcript: unknown[] = []
   const clock = mock.clock(on)
   mock.env(on, { XDG_RUNTIME_DIR: '/run/user/1000' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -27,11 +29,13 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
     writes.push({ path: e.path, body: JSON.parse(e.text) })
     return { value: undefined }
   })
+  on('session.messages', () => ({ value: transcript }) as never)
   on('model.complete', (_$, e) => {
     models.push(typeof e.prompt === 'string' ? e.prompt : '')
+    systems.push(typeof e.system === 'string' ? e.system : '')
     return { value: { isAnswered: true, text: label, usage: {} } } as never
   })
-  return { clock, writes, models, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id } }
+  return { clock, writes, models, systems, setTranscript: (rows: unknown[]) => { transcript = rows }, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id } }
 }
 
 test('session.start publishes the project under the claude pid', async ($, on) => {
@@ -88,61 +92,142 @@ test('a permission dialog marks the session waiting until the tool call ends', a
   expect(world.last()).toMatchObject({ phase: 'waiting' })
 })
 
-test('the first prompt gets a Haiku title at once, before any turn ends', async ($, on) => {
+const WORK = [
+  { role: 'user', text: 'fix the ota paths', toolUses: [] },
+  { role: 'assistant', text: 'Looking at the asset manifest first.', toolUses: [{ tool: 'Bash', input: { description: 'List the stale asset manifests' } }] },
+]
+
+test('the title is not asked for at the prompt, but at the first response to it', async ($, on) => {
   const world = engine(on)
+  world.setTranscript(WORK)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'ota paths are broken' })
   await world.clock.advance(0)
+  expect(world.models).toHaveLength(0)
+  expect(world.last()).toMatchObject({ task: 'ota paths are broken' })
 
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
   expect(world.models).toHaveLength(1)
   expect(world.models[0]).toContain('ota paths are broken')
-  expect(world.last()).toMatchObject({ phase: 'working', task: 'fixing OTA asset paths' })
+  expect(world.models[0]).toContain('Looking at the asset manifest first.')
+  expect(world.models[0]).toContain('List the stale asset manifests')
+  expect(world.last()).toMatchObject({ task: 'fixing OTA asset paths' })
+})
+
+test('a turn that ends without a tool call is also a response', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'what does this flag do' })
+  await $.turn.complete({ reason: 'answer', answer: 'It turns the cache off' } as never)
+  await world.clock.advance(0)
+
+  expect(world.models).toHaveLength(1)
+  expect(world.models[0]).toContain('It turns the cache off')   // no transcript: the last reply stands in
+})
+
+test('a second tool call or the turn end in the same prompt does not ask again', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'ota paths are broken' })
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  await $.tool.call({ tool: 'Read', input: {} } as never)
+  await $.turn.complete({ reason: 'answer', answer: 'done' } as never)
+  await world.clock.advance(60_000)
+
+  expect(world.models).toHaveLength(1)
+})
+
+test('every new user prompt gets a title after its first response, however soon', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'ota paths are broken' })
+  await $.turn.complete({ reason: 'answer', answer: 'fixed' } as never)
+  await world.clock.advance(5_000)
+  await $.prompt.submit({ text: 'now the manifest' })
+  await $.turn.complete({ reason: 'answer', answer: 'rewrote it' } as never)
+  await world.clock.advance(0)
+
+  expect(world.models).toHaveLength(2)
+  expect(world.models[1]).toContain('now the manifest')
+})
+
+test('a task that runs past 3 minutes is re-titled every 2 minutes as it changes gears', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'update the testing policy' })
+  await world.clock.advance(10_000)
+  await $.tool.call({ tool: 'Bash', input: {} } as never)            // first response: title 1
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(1)
+
+  await world.clock.advance(100_000)                                 // 1:50 in: not a long task yet
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(1)
+
+  await world.clock.advance(80_000)                                  // 3:10 in, only 3:00 since title 1 but title 1 was 3:00 ago
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(2)
+  expect(world.models[1]).toContain('Minutes since the user')
+
+  await world.clock.advance(60_000)                                  // 1:00 after title 2: too soon
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(2)
+
+  await world.clock.advance(70_000)                                  // 2:10 after title 2
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(3)
+})
+
+test('an idle session is never re-titled, however long it sits', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'ota paths are broken' })
+  await $.turn.complete({ reason: 'answer', answer: 'fixed' } as never)
+  await world.clock.advance(0)
+  await world.clock.advance(3_600_000)
+
+  expect(world.models).toHaveLength(1)
+})
+
+test('the title may lead with the subtask and keep the bigger task in a parenthetical', async ($, on) => {
+  const label = 'disabling failing tests until code changes land (updating testing policy for native-cards)'
+  const world = engine(on, label)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'update the testing policy' })
+  await $.turn.complete({ reason: 'answer', answer: 'ok' } as never)
+  await world.clock.advance(0)
+
+  expect(world.last()?.task).toBe(label)
+  expect(world.systems[0]).toContain('parenthetical')
+  expect(world.systems[0]).toContain('previous title')
+})
+
+test('quotes around a title go, but dots inside a file name stay', async ($, on) => {
+  const world = engine(on, '"refactoring register.ts so titles follow the work."')
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go' })
+  await $.turn.complete({ reason: 'answer', answer: 'ok' } as never)
+  await world.clock.advance(0)
+
+  expect(world.last()?.task).toBe('refactoring register.ts so titles follow the work')
 })
 
 test('pasted-content tags are not part of the title or the prompt sent to Haiku', async ($, on) => {
   const world = engine(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: '<pasted_content id="7"> fix the login loop </pasted_content>' })
-
   expect(world.writes.some((w) => String(w.body.task).includes('pasted_content'))).toBe(false)
   expect(world.writes[1]?.body.task).toBe('fix the login loop')
+
+  await $.turn.complete({ reason: 'answer', answer: 'ok' } as never)
+  await world.clock.advance(0)
   expect(world.models[0]).not.toContain('pasted_content')
-})
-
-test('a turn end inside the interval does not call Haiku again, one after it does', async ($, on) => {
-  const world = engine(on)
-  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  await $.prompt.submit({ text: 'ota paths are broken' })
-  await world.clock.advance(0)
-  await $.turn.complete({ reason: 'answer', answer: 'Found the stale asset manifest' } as never)
-  await world.clock.advance(60_000)
-
-  expect(world.models).toHaveLength(1)
-  expect(world.last()).toMatchObject({ phase: 'idle', turns: 1 })
-
-  await world.clock.advance(120_000)
-  await $.prompt.submit({ text: 'now the manifest' })
-  await $.turn.complete({ reason: 'answer', answer: 'Rewrote the manifest' } as never)
-  await world.clock.advance(0)
-
-  expect(world.models).toHaveLength(2)
-  expect(world.models[1]).toContain('Rewrote the manifest')
-})
-
-test('a long turn refreshes the title after a tool call once the interval has passed', async ($, on) => {
-  const world = engine(on)
-  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  await $.prompt.submit({ text: 'ota paths are broken' })
-  await world.clock.advance(0)
-
-  await $.tool.call({ name: 'Bash', input: {} } as never)
-  await world.clock.advance(30_000)
-  expect(world.models).toHaveLength(1)
-
-  await world.clock.advance(150_000)
-  await $.tool.call({ name: 'Bash', input: {} } as never)
-  await world.clock.advance(0)
-  expect(world.models).toHaveLength(2)
 })
 
 test('the context fill is published after a turn', async ($, on) => {
@@ -161,12 +246,10 @@ test('a subagent turn does not count or trigger a summary', async ($, on) => {
   const world = engine(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'do the thing' })
-  await world.clock.advance(0)
-  const before = world.models.length
   await $.turn.complete({ reason: 'answer', answer: 'sub report', agentId: 'agent-1' } as never)
   await world.clock.advance(200_000)
 
-  expect(world.models).toHaveLength(before)
+  expect(world.models).toHaveLength(0)
   expect(world.last()).toMatchObject({ phase: 'working', turns: 0 })
 })
 

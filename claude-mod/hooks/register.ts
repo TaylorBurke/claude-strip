@@ -5,16 +5,24 @@ type Phase = 'idle' | 'working' | 'waiting' | 'ended'
 const MAX_RECENT = 4
 const MAX_PROMPT_CHARS = 300
 const MAX_ANSWER_CHARS = 500
+// How much of what the assistant has been doing goes to Haiku: its last few messages, each cut.
+const MAX_ACTIVITY = 4
+const MAX_ACTIVITY_CHARS = 300
 // A safety cap only: titles are stored whole and the strip trims to fit its width.
 const MAX_TASK_CHARS = 240
 
 const SYSTEM =
   'You write the title shown in a header strip above a coding session, so someone ' +
-  'juggling several sessions can tell them apart. Reply with ONLY a specific 8-14 ' +
-  'word lowercase phrase starting with a verb ending in -ing. Name the concrete ' +
-  'feature, bug, file or system being worked on, not the generic activity. Judge by ' +
-  'the whole session, favouring what the assistant is doing now. No quotes, no ' +
-  'trailing punctuation, no preamble.'
+  'juggling several sessions can tell them apart. Reply with ONLY a lowercase phrase ' +
+  'starting with a verb ending in -ing that names the concrete feature, bug, file or ' +
+  'system the assistant is working on right now, not the generic activity (6-12 words). ' +
+  'When that current subtask is part of a bigger task, and the two differ, follow it ' +
+  'with the bigger task in a short parenthetical (3-8 words), for example: ' +
+  'disabling failing tests until code changes land (updating testing policy for native-cards). ' +
+  'When the current work is the task itself, give the phrase alone, with no parenthetical. ' +
+  'Read the bigger task from the previous title and keep it as it is until the user changes ' +
+  'what they are after. Judge by what the assistant has been doing most recently. No quotes, ' +
+  'no trailing punctuation, no preamble.'
 
 // Module state starts over on a hot reload; session.start refills it.
 let useHaiku = true
@@ -32,11 +40,14 @@ let turns = 0
 let recent: string[] = []
 let lastAnswer = ''
 let isSummarizing = false
-// When Haiku last wrote the title (ms), and whether it ever has: until then the title is only the
-// first prompt. Afterwards it is refreshed at most once per interval, while the session works.
-let lastSummaryAt = 0
-let titled = false
-let summaryEveryMs = 150_000
+// Until Haiku has written one, the title is the prompt, cut. Haiku is asked once per user prompt,
+// as soon as the assistant has started to respond (a tool call finishes or the turn ends), so it
+// can see what the answer is about. Past `longTaskAfterMs` since the prompt, the task has run
+// long, and the title is refreshed every `summaryEveryMs` as it changes gears.
+let promptAt = 0
+let lastSummaryAt = -1
+let summaryEveryMs = 120_000
+let longTaskAfterMs = 180_000
 // Share of the context window in use, 0-100; -1 until the engine reports one.
 let contextPct = -1
 
@@ -71,22 +82,46 @@ async function refreshContext($: EngineInterface): Promise<void> {
   }
 }
 
+// What the assistant has been doing lately: its latest few messages, cut, and the tools it used
+// with the one-line description it gave each. Falls back to the last reply if the transcript
+// cannot be read.
+async function recentActivity($: EngineInterface): Promise<string> {
+  try {
+    const rows = (await $.session.messages()).filter((m) => m.role === 'assistant').slice(-MAX_ACTIVITY)
+    const lines = rows.map((m) => {
+      const tools = m.toolUses
+        .map((t) => {
+          const d = typeof t.input?.description === 'string' ? `: ${squash(t.input.description, 80)}` : ''
+          return `${t.tool}${d}`
+        })
+        .join('; ')
+      return [squash(m.text, MAX_ACTIVITY_CHARS), tools && `[tools: ${tools}]`].filter(Boolean).join(' ')
+    })
+    const text = lines.filter(Boolean).join('\n')
+    if (text) return text
+  } catch {
+    // use the last reply
+  }
+  return lastAnswer || '(nothing yet)'
+}
+
 async function summarize($: EngineInterface): Promise<void> {
   if (!useHaiku || isSummarizing || recent.length === 0) return
   isSummarizing = true
   try {
-    lastSummaryAt = await $.clock.now()
+    const now = await $.clock.now()
+    lastSummaryAt = now
+    const sincePrompt = Math.max(0, Math.round((now - promptAt) / 60_000))
     const prompt =
       `Project: ${project}\nPrevious title: ${task || '(none)'}\n` +
       `Recent user prompts, oldest first:\n${recent.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n` +
-      `Assistant's latest reply (start of it):\n${lastAnswer || '(none yet)'}`
-    const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 64, effort: 'low' })
+      `Minutes since the user's last prompt: ${sincePrompt}\n` +
+      `What the assistant has been doing, oldest first:\n${await recentActivity($)}`
+    const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 96, effort: 'low' })
     if (r.isAnswered) {
-      const label = squash(r.text.replace(/["'.]/g, ''), MAX_TASK_CHARS)
-      if (label) {
-        task = label
-        titled = true
-      }
+      // Wrapping quotes and a trailing full stop go; dots inside (file names) stay.
+      const label = squash(r.text.replace(/^["'\s]+|["'.\s]+$/g, '').replace(/"/g, ''), MAX_TASK_CHARS)
+      if (label) task = label
     }
   } finally {
     isSummarizing = false
@@ -99,16 +134,23 @@ function background(work: Promise<void>): void {
   work.catch(() => {})
 }
 
-// A refresh while the session works: only if the interval since the last one has passed.
+// Called when a tool call finishes or a turn ends, the moments the assistant has visibly
+// responded. Once per user prompt, at the first of them; and, for a task that has run past
+// `longTaskAfterMs` since the prompt, again every `summaryEveryMs`. Nothing fires without an
+// event: an idle session is left alone.
 async function refreshIfDue($: EngineInterface): Promise<void> {
   if (isSummarizing || !useHaiku) return
-  if ((await $.clock.now()) - lastSummaryAt >= summaryEveryMs) await summarize($)
+  const now = await $.clock.now()
+  if (lastSummaryAt < promptAt) await summarize($)
+  else if (now - promptAt >= longTaskAfterMs && now - lastSummaryAt >= summaryEveryMs) await summarize($)
 }
 
 export const register: Register = (on, options) => {
   useHaiku = options.useHaiku !== false
-  const minutes = Number(options.summarizeEveryMinutes)
-  summaryEveryMs = Math.max(0.5, minutes > 0 ? minutes : 2.5) * 60_000
+  const every = Number(options.summarizeEveryMinutes)
+  summaryEveryMs = Math.max(0.5, every > 0 ? every : 2) * 60_000
+  const after = Number(options.longTaskAfterMinutes)
+  longTaskAfterMs = Math.max(0.5, after > 0 ? after : 3) * 60_000
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -127,10 +169,10 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     recent = [...recent, squash(e.text, MAX_PROMPT_CHARS)].slice(-MAX_RECENT)
     if (!task) task = squash(e.text, MAX_TASK_CHARS)
+    promptAt = await $.clock.now()
     phase = 'working'
     await publish($)
-    // The first prompt of a session gets a real title at once, not after the first long turn.
-    if (!titled) background(summarize($))
+    // Haiku is asked once the assistant has begun to respond (refreshIfDue), not here.
     return next(e)
   })
 

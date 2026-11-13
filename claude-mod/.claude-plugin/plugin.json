@@ -6,14 +6,20 @@
     "useHaiku": {
       "type": "boolean",
       "title": "Summarize the task with Haiku",
-      "description": "One tiny Haiku call (~$0.0006) writes the task line when you send the first prompt, then rewrites it every few minutes while the session works. Off: the task is the first prompt, truncated.",
+      "description": "One tiny Haiku call (~$0.0006) writes the title for each prompt you send, once Claude has started to answer. On a long task it is rewritten as the work changes gears. Off: the task is the first prompt, truncated.",
       "default": true
+    },
+    "longTaskAfterMinutes": {
+      "type": "number",
+      "title": "A long task starts after N minutes",
+      "description": "Once this long has passed since your last prompt, the title is refreshed on the interval below.",
+      "default": 3
     },
     "summarizeEveryMinutes": {
       "type": "number",
-      "title": "Re-summarize every N minutes",
-      "description": "While the session works, the task line is rewritten at most this often, when a tool call or a turn finishes. An idle session is never re-summarized.",
-      "default": 2.5
+      "title": "Re-summarize a long task every N minutes",
+      "description": "Checked when a tool call or a turn finishes; an idle session is never re-summarized.",
+      "default": 2
     }
   },
   "author": {
