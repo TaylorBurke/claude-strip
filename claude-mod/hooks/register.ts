@@ -20,6 +20,9 @@ const SYSTEM =
 let useHaiku = true
 let file = ''
 let pid = 0
+// The session's id, so the strip can be tied to the window another tool shows for the same
+// session. A /clear swaps it without a session.start, so it is read again on every publish.
+let sessionId = ''
 let project = ''
 let cwd = ''
 let task = ''
@@ -37,9 +40,19 @@ function squash(text: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
 }
 
+async function refreshSessionId($: EngineInterface): Promise<void> {
+  try {
+    const id = await $.session.id()
+    if (typeof id === 'string' && id) sessionId = id
+  } catch {
+    // keep the last id
+  }
+}
+
 async function publish($: EngineInterface): Promise<void> {
   if (!file) return
-  const body = { pid, project, cwd, task, phase, running, turns, context: contextPct, updatedAt: await $.clock.now() }
+  await refreshSessionId($)
+  const body = { pid, sessionId, project, cwd, task, phase, running, turns, context: contextPct, updatedAt: await $.clock.now() }
   await $.fs.write(file, JSON.stringify(body))
 }
 

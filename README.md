@@ -31,6 +31,13 @@ covers the first one or two terminal rows; give Claude windows real top padding
 terminal's config: foot, Alacritty, kitty and ghostty are supported). Hovering the
 strip shows the full title in a tooltip, but only when a narrow window elides it.
 
+**Optional: a map icon.** If [roundhouse](https://github.com/TaylorBurke/roundhouse) is installed
+(its `roundhouse` command is on your PATH), each strip gets a small hub-and-spokes icon at the
+far right. Click it to show or hide a window with a live map of that session; it is lit while
+the window is open. The window's header repeats the strip's text, so the two are easy to pair,
+and a `/clear` carries the window over to the new conversation. Without roundhouse the icon
+is not shown and nothing else changes.
+
 A new session shows no strip until you send its first prompt, so Claude Code's
 startup banner stays fully visible.
 
@@ -116,7 +123,9 @@ terminal is not padded. To pad every foot window instead, set
 ## How it works
 
 The mod writes `$XDG_RUNTIME_DIR/claude-strip/<claude-pid>.json` on prompt,
-tool, permission and turn events. `scan.py` joins those files with
+tool, permission and turn events. The file includes the session's id (`sessionId`), which
+is how roundhouse recognises the session; a `/clear` changes it, so it is read again on
+every write. `scan.py` joins those files with
 `hyprctl clients`, places each session relative to its monitor, and deletes
 files whose process has died. `Service.qml` re-runs it on every Hyprland event
 and once a second, and draws one layer-shell strip per session.
@@ -134,8 +143,14 @@ Plugins run unsandboxed with your user permissions, so for transparency:
   `claude plugin list` and, only if the mod is missing, sends a notification; on
   your click it runs `claude plugin marketplace add TaylorBurke/claude-strip`
   and `claude plugin install session-strip@claude-strip`.
-- **Reads:** `/proc/<pid>/stat` (to walk parent processes) and the state files
-  in `$XDG_RUNTIME_DIR/claude-strip/`.
+- **Optional, only if `roundhouse` is on your PATH:** clicking a strip's map icon runs
+  `roundhouse toggle <session id>`, and when a session's id changes (a `/clear`) the strip runs
+  `roundhouse rebind <old id> <new id>`. Nothing else is run. The id comes from the state
+  file and must be 8-64 letters, digits, `-` or `_` to reach a command line at all, and the
+  command is started with an argument list, never through a shell.
+- **Reads:** `/proc/<pid>/stat` (to walk parent processes), the state files
+  in `$XDG_RUNTIME_DIR/claude-strip/`, and, if roundhouse is installed,
+  `$XDG_RUNTIME_DIR/lot-map/windows.json` (which sessions have a map open, to light the icon).
 - **Writes/deletes:** only state files in that directory, and only stale ones
   (dead process or ended session). The mod writes them; the plugin deletes them.
   A drag leaves a short-lived `drag-*.pending` marker there so a window is
@@ -165,7 +180,7 @@ Plugins run unsandboxed with your user permissions, so for transparency:
 
 ```sh
 claude plugin test claude-mod                       # mod tests
-(cd omarchy-plugin && python3 -m unittest -q test_scan test_follow test_mod_setup)
+(cd omarchy-plugin && python3 -m unittest -q test_scan test_follow test_mod_setup test_map)   # test_map needs qt6-declarative
 claude plugin validate .                            # mod + marketplace
 omarchy plugin validate .                           # Omarchy manifest
 ```

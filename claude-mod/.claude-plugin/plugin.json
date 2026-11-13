@@ -1,7 +1,7 @@
 {
   "name": "session-strip",
-  "version": "0.2.0",
-  "description": "Publishes each Claude Code session's synopsis (project, task, tools running) for an on-screen strip",
+  "version": "0.3.0",
+  "description": "Publishes each Claude Code session's synopsis (project, task, tools running) and id for an on-screen strip",
   "userConfig": {
     "useHaiku": {
       "type": "boolean",

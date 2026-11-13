@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
+import "map.js" as MapJs
 
 // One thin strip per terminal window that runs a Claude Code session, drawn in
 // the window's top padding. Sessions come from scan.py, which joins the state
@@ -52,6 +53,30 @@ Item {
         if (phase === "waiting")
             return Color.urgent;
         return phase === "working" ? Color.accent : Color.muted;
+    }
+
+    // roundhouse (optional): a window with a live map of one session, from the roundhouse project.
+    // When `roundhouse` is installed and the mod has published the session's id, each strip gets a
+    // small icon that shows or hides that session's map.
+    function roundhouse(args) {
+        Quickshell.execDetached(["roundhouse"].concat(args));
+    }
+
+    // A /clear gives a session a new id without any other sign; the map shown for the old id moves along.
+    property var knownSids: ({})
+    onSessionsChanged: {
+        const r = MapJs.rebinds(knownSids, sessions);
+        knownSids = r.known;
+        if (sessions.some(s => s.mapAvailable))
+            for (const pair of r.pairs)
+                roundhouse(["rebind", pair[0], pair[1]]);
+    }
+
+    // After a click, look again soon so the icon shows the new state.
+    Timer {
+        id: mapRefresh
+        interval: 500
+        onTriggered: root.scanNow()
     }
 
     function scanNow() {
@@ -184,6 +209,7 @@ Item {
             required property var modelData
             readonly property var info: root.byPid[modelData] ?? ({ task: "", phase: "idle", running: 0, x: 0, y: 0, w: 0, mx: 0, my: 0, monitor: "", address: "" })
             property bool tipOpen: false
+            property bool iconTipOpen: false
             // While the strip is dragged, follow.py reports the window's real geometry
             // (global x y w h) many times a second, which beats waiting for the next scan.
             property var live: null
@@ -233,7 +259,7 @@ Item {
                         top: parent.top
                         bottom: divider.top
                         leftMargin: root.padding
-                        rightMargin: root.padding
+                        rightMargin: root.padding + (mapIcon.visible ? mapIcon.width + 10 : 0)
                     }
 
                     Text {
@@ -402,6 +428,84 @@ Item {
                     id: tipDelay
                     interval: 350
                     onTriggered: strip.tipOpen = hover.containsMouse
+                }
+
+                // roundhouse: show or hide this session's map. Declared after the drag area, so a
+                // click on it is its own and never starts a drag.
+                MapIcon {
+                    id: mapIcon
+                    visible: strip.info.mapAvailable === true
+                    anchors {
+                        right: parent.right
+                        rightMargin: root.padding
+                        verticalCenter: content.verticalCenter
+                    }
+                    shown: strip.info.mapShown === true
+                    litColor: Color.accent
+                    dimColor: Color.muted
+                    hoverColor: Color.foreground
+                    onToggled: {
+                        root.roundhouse(["toggle", strip.info.sid]);
+                        mapRefresh.restart();
+                    }
+                    onHoveredChanged: {
+                        if (hovered)
+                            iconTipDelay.restart();
+                        else {
+                            iconTipDelay.stop();
+                            strip.iconTipOpen = false;
+                        }
+                    }
+                }
+
+                Timer {
+                    id: iconTipDelay
+                    interval: 400
+                    onTriggered: strip.iconTipOpen = mapIcon.hovered
+                }
+            }
+
+            PopupWindow {
+                id: iconTip
+                readonly property int bubblePadding: 8
+                visible: strip.iconTipOpen && mapIcon.visible
+                color: "transparent"
+                implicitWidth: Math.ceil(iconMetrics.width) + 2 * bubblePadding + 2
+                implicitHeight: Math.ceil(iconMetrics.height) + 2 * bubblePadding + 2
+
+                anchor {
+                    window: strip
+                    rect.x: strip.width - root.padding - mapIcon.width
+                    rect.y: strip.height + 4
+                    rect.width: mapIcon.width
+                    rect.height: 1
+                    edges: Edges.Top | Edges.Right
+                    gravity: Edges.Bottom | Edges.Left
+                    adjustment: PopupAdjustment.Slide
+                }
+
+                TextMetrics {
+                    id: iconMetrics
+                    font.family: Style.fontFamily
+                    font.pixelSize: Style.font.body
+                    text: mapIcon.shown ? "Hide the roundhouse map" : "Show the roundhouse map"
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: Color.tooltip.background
+                    border.color: Color.tooltip.border
+                    border.width: 1
+                    radius: Style.cornerRadius
+
+                    Text {
+                        anchors.centerIn: parent
+                        textFormat: Text.PlainText
+                        text: iconMetrics.text
+                        color: Color.tooltip.text
+                        font.family: Style.fontFamily
+                        font.pixelSize: Style.font.body
+                    }
                 }
             }
 

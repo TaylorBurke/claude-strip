@@ -4,10 +4,12 @@ type Written = { path: string; body: Record<string, unknown> }
 
 const PID = 4242
 const FILE = `/run/user/1000/claude-strip/${PID}.json`
+const SESSION = '520a9593-0cb7-48dc-97da-2d7724564449'
 
 // Stand-ins for the engine's own nouns, so the mod runs against what it would see.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths') {
   const writes: Written[] = []
+  let sessionId = SESSION
   const models: string[] = []
   const clock = mock.clock(on)
   mock.env(on, { XDG_RUNTIME_DIR: '/run/user/1000' })
@@ -19,6 +21,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }) as never)
   on('process.run', () => ({ value: { exitCode: 0, stdout: `${PID}\n`, stderr: '' } }) as never)
   on('session.root', () => ({ value: '/home/ww/Work/native-cards' }))
+  on('session.id', () => ({ value: sessionId }) as never)
   on('fs.write', (_$, e) => {
     writes.push({ path: e.path, body: JSON.parse(e.text) })
     return { value: undefined }
@@ -27,7 +30,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
     models.push(typeof e.prompt === 'string' ? e.prompt : '')
     return { value: { isAnswered: true, text: label, usage: {} } } as never
   })
-  return { clock, writes, models, last: () => writes[writes.length - 1]?.body }
+  return { clock, writes, models, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id } }
 }
 
 test('session.start publishes the project under the claude pid', async ($, on) => {
@@ -36,6 +39,17 @@ test('session.start publishes the project under the claude pid', async ($, on) =
 
   expect(world.writes[0]?.path).toBe(FILE)
   expect(world.last()).toMatchObject({ pid: PID, project: 'native-cards', phase: 'idle', running: 0 })
+})
+
+test('the session id is published, and read again after a /clear changes it', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(world.last()).toMatchObject({ sessionId: SESSION })
+
+  // /clear: the process goes on under a new id, and no session.start fires
+  world.setSession('0d6a4f1e-1111-2222-3333-444455556666')
+  await $.prompt.submit({ text: 'first prompt after the clear' })
+  expect(world.last()).toMatchObject({ sessionId: '0d6a4f1e-1111-2222-3333-444455556666' })
 })
 
 test('a prompt marks the session working and seeds the task from it', async ($, on) => {

@@ -10,10 +10,13 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-strip")
 CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+# roundhouse (optional): a window with a live map of a session. It lists the windows it shows here.
+ROUNDHOUSE_DIR = os.environ.get("LOT_MAP_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "lot-map")
 
 # Where each terminal keeps its font size, and the size it uses when unset.
 TERMINAL_CONFIGS = {
@@ -79,6 +82,25 @@ def terminal_font_pt(pid):
         return default
 
 
+def roundhouse_sid(session_id):
+    """The 8-character session id roundhouse uses, or "" when the mod gave none (or an odd one).
+
+    It ends up in a command line, so only letters, digits, - and _ are accepted."""
+    if isinstance(session_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{8,64}", session_id):
+        return session_id[:8]
+    return ""
+
+
+def roundhouse_shown():
+    """The session ids that have a roundhouse window right now (empty if roundhouse is not running)."""
+    try:
+        with open(os.path.join(ROUNDHOUSE_DIR, "windows.json"), encoding="utf-8") as f:
+            entries = json.load(f)["shown"]
+        return {e["sid"] for e in entries if isinstance(e, dict) and isinstance(e.get("sid"), str)}
+    except (OSError, ValueError, KeyError, TypeError):
+        return set()
+
+
 def window_for(pid, clients_by_pid):
     seen = 0
     while pid > 1 and seen < 64:
@@ -126,6 +148,9 @@ def main():
             visible.add(special)
     clients_by_pid = {c["pid"]: c for c in clients if c.get("mapped") and not c.get("hidden")}
 
+    map_installed = shutil.which("roundhouse") is not None
+    map_shown = roundhouse_shown() if map_installed else set()
+
     out = []
     for path in files:
         try:
@@ -144,7 +169,11 @@ def main():
         mon = monitors.get(win["monitor"]) if win else None
         if not win or not mon or win["workspace"]["id"] not in visible:
             continue
+        sid = roundhouse_sid(s.get("sessionId"))
         s.update(
+            sid=sid,
+            mapAvailable=bool(map_installed and sid),
+            mapShown=sid in map_shown,
             address=win["address"],
             monitor=mon["name"],
             x=win["at"][0] - mon["x"],
