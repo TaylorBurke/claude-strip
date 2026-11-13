@@ -79,13 +79,15 @@ only adds itself to the plugin list in `shell.json` when you enable it.
 
 Mod options (Claude Code config menu):
 
-- **Summarize the task with Haiku** (default on). After turn 1 and then every N
-  turns, one Haiku call through your session's own client rewrites the title
+- **Summarize the task with Haiku** (default on). When you send the first prompt,
+  and then at most every N minutes while the session works (checked when a tool
+  call or a turn finishes; an idle session is left alone), one Haiku call through
+  your session's own client rewrites the title
   (8-14 words, naming the concrete feature or bug). It sends the project name,
   the last four prompts (each cut to 300 characters) and the start of the
   assistant's latest reply (500 characters), and costs about $0.001. Off: the
   title is the first prompt, truncated.
-- **Re-summarize every N turns** (default 3).
+- **Re-summarize every N minutes** (default 2.5).
 
 The strip's text size is taken from each window's terminal config, so it always
 matches the session text. Its height follows Omarchy's system font setting

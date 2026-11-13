@@ -17,6 +17,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('turn.complete', () => ({ text: '' }) as never)
   on('classic.PermissionRequest', () => ({}) as never)
+  on('tool.call', () => ({ result: { content: 'ok' } }) as never)
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, tokens: 124000, percent: 62 }, rateLimits: [] } }) as never)
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }) as never)
   on('process.run', () => ({ value: { exitCode: 0, stdout: `${PID}\n`, stderr: '' } }) as never)
@@ -87,17 +88,61 @@ test('a permission dialog marks the session waiting until the tool call ends', a
   expect(world.last()).toMatchObject({ phase: 'waiting' })
 })
 
-test('turn.complete goes idle and Haiku rewrites the task after turn 1', async ($, on) => {
+test('the first prompt gets a Haiku title at once, before any turn ends', async ($, on) => {
   const world = engine(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'ota paths are broken' })
-  await $.turn.complete({ reason: 'answer', answer: 'Found the stale asset manifest' } as never)
   await world.clock.advance(0)
 
   expect(world.models).toHaveLength(1)
   expect(world.models[0]).toContain('ota paths are broken')
-  expect(world.models[0]).toContain('Found the stale asset manifest')
-  expect(world.last()).toMatchObject({ phase: 'idle', turns: 1, task: 'fixing OTA asset paths' })
+  expect(world.last()).toMatchObject({ phase: 'working', task: 'fixing OTA asset paths' })
+})
+
+test('pasted-content tags are not part of the title or the prompt sent to Haiku', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: '<pasted_content id="7"> fix the login loop </pasted_content>' })
+
+  expect(world.writes.some((w) => String(w.body.task).includes('pasted_content'))).toBe(false)
+  expect(world.writes[1]?.body.task).toBe('fix the login loop')
+  expect(world.models[0]).not.toContain('pasted_content')
+})
+
+test('a turn end inside the interval does not call Haiku again, one after it does', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'ota paths are broken' })
+  await world.clock.advance(0)
+  await $.turn.complete({ reason: 'answer', answer: 'Found the stale asset manifest' } as never)
+  await world.clock.advance(60_000)
+
+  expect(world.models).toHaveLength(1)
+  expect(world.last()).toMatchObject({ phase: 'idle', turns: 1 })
+
+  await world.clock.advance(120_000)
+  await $.prompt.submit({ text: 'now the manifest' })
+  await $.turn.complete({ reason: 'answer', answer: 'Rewrote the manifest' } as never)
+  await world.clock.advance(0)
+
+  expect(world.models).toHaveLength(2)
+  expect(world.models[1]).toContain('Rewrote the manifest')
+})
+
+test('a long turn refreshes the title after a tool call once the interval has passed', async ($, on) => {
+  const world = engine(on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'ota paths are broken' })
+  await world.clock.advance(0)
+
+  await $.tool.call({ name: 'Bash', input: {} } as never)
+  await world.clock.advance(30_000)
+  expect(world.models).toHaveLength(1)
+
+  await world.clock.advance(150_000)
+  await $.tool.call({ name: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(2)
 })
 
 test('the context fill is published after a turn', async ($, on) => {
@@ -116,10 +161,12 @@ test('a subagent turn does not count or trigger a summary', async ($, on) => {
   const world = engine(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'do the thing' })
-  await $.turn.complete({ reason: 'answer', answer: 'sub report', agentId: 'agent-1' } as never)
   await world.clock.advance(0)
+  const before = world.models.length
+  await $.turn.complete({ reason: 'answer', answer: 'sub report', agentId: 'agent-1' } as never)
+  await world.clock.advance(200_000)
 
-  expect(world.models).toHaveLength(0)
+  expect(world.models).toHaveLength(before)
   expect(world.last()).toMatchObject({ phase: 'working', turns: 0 })
 })
 

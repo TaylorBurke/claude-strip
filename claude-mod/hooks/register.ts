@@ -32,11 +32,17 @@ let turns = 0
 let recent: string[] = []
 let lastAnswer = ''
 let isSummarizing = false
+// When Haiku last wrote the title (ms), and whether it ever has: until then the title is only the
+// first prompt. Afterwards it is refreshed at most once per interval, while the session works.
+let lastSummaryAt = 0
+let titled = false
+let summaryEveryMs = 150_000
 // Share of the context window in use, 0-100; -1 until the engine reports one.
 let contextPct = -1
 
 function squash(text: string, max: number): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
+  // Pasted text arrives wrapped in <pasted_content ...> tags; they say nothing about the work.
+  const flat = text.replace(/<\/?pasted_content[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
 }
 
@@ -69,6 +75,7 @@ async function summarize($: EngineInterface): Promise<void> {
   if (!useHaiku || isSummarizing || recent.length === 0) return
   isSummarizing = true
   try {
+    lastSummaryAt = await $.clock.now()
     const prompt =
       `Project: ${project}\nPrevious title: ${task || '(none)'}\n` +
       `Recent user prompts, oldest first:\n${recent.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n` +
@@ -76,7 +83,10 @@ async function summarize($: EngineInterface): Promise<void> {
     const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 64, effort: 'low' })
     if (r.isAnswered) {
       const label = squash(r.text.replace(/["'.]/g, ''), MAX_TASK_CHARS)
-      if (label) task = label
+      if (label) {
+        task = label
+        titled = true
+      }
     }
   } finally {
     isSummarizing = false
@@ -84,9 +94,21 @@ async function summarize($: EngineInterface): Promise<void> {
   await publish($)
 }
 
+// Title work runs in the background; a failure must never surface as an unhandled rejection.
+function background(work: Promise<void>): void {
+  work.catch(() => {})
+}
+
+// A refresh while the session works: only if the interval since the last one has passed.
+async function refreshIfDue($: EngineInterface): Promise<void> {
+  if (isSummarizing || !useHaiku) return
+  if ((await $.clock.now()) - lastSummaryAt >= summaryEveryMs) await summarize($)
+}
+
 export const register: Register = (on, options) => {
   useHaiku = options.useHaiku !== false
-  const every = Math.max(1, Number(options.summarizeEvery) || 3)
+  const minutes = Number(options.summarizeEveryMinutes)
+  summaryEveryMs = Math.max(0.5, minutes > 0 ? minutes : 2.5) * 60_000
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -107,6 +129,8 @@ export const register: Register = (on, options) => {
     if (!task) task = squash(e.text, MAX_TASK_CHARS)
     phase = 'working'
     await publish($)
+    // The first prompt of a session gets a real title at once, not after the first long turn.
+    if (!titled) background(summarize($))
     return next(e)
   })
 
@@ -121,6 +145,8 @@ export const register: Register = (on, options) => {
       // No event marks the person's approval, so waiting clears when the approved tool finishes.
       if (phase === 'waiting') phase = 'working'
       await publish($)
+      // A long turn keeps the title current: re-written when the interval has passed.
+      background(refreshIfDue($))
     }
   })
 
@@ -139,7 +165,7 @@ export const register: Register = (on, options) => {
     turns += 1
     await refreshContext($)
     await publish($)
-    if (turns === 1 || turns % every === 0) void summarize($)
+    background(refreshIfDue($))
     return next(e)
   })
 

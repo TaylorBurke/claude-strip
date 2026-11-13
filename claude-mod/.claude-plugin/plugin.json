@@ -6,14 +6,14 @@
     "useHaiku": {
       "type": "boolean",
       "title": "Summarize the task with Haiku",
-      "description": "Every few turns, one tiny Haiku call (~$0.0006) rewrites the task line. Off: the task is the first prompt, truncated.",
+      "description": "One tiny Haiku call (~$0.0006) writes the task line when you send the first prompt, then rewrites it every few minutes while the session works. Off: the task is the first prompt, truncated.",
       "default": true
     },
-    "summarizeEvery": {
+    "summarizeEveryMinutes": {
       "type": "number",
-      "title": "Re-summarize every N turns",
-      "description": "The task line is first written after turn 1, then refreshed every N turns.",
-      "default": 3
+      "title": "Re-summarize every N minutes",
+      "description": "While the session works, the task line is rewritten at most this often, when a tool call or a turn finishes. An idle session is never re-summarized.",
+      "default": 2.5
     }
   },
   "author": {
