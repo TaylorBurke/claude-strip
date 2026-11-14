@@ -1,19 +1,25 @@
 {
   "name": "session-strip",
-  "version": "0.2.1",
-  "description": "Publishes each Claude Code session's synopsis (project, task, tools running) for an on-screen strip",
+  "version": "0.3.0",
+  "description": "Publishes each Claude Code session's synopsis (project, task, tools running) and id for an on-screen strip",
   "userConfig": {
     "useHaiku": {
       "type": "boolean",
       "title": "Summarize the task with Haiku",
-      "description": "Every few turns, one tiny Haiku call (~$0.0006) rewrites the task line. Off: the task is the first prompt, truncated.",
+      "description": "One tiny Haiku call (~$0.0006) writes the title for each prompt you send, once Claude has started to answer. On a long task it is rewritten as the work changes gears. Off: the task is the first prompt, truncated.",
       "default": true
     },
-    "summarizeEvery": {
+    "longTaskAfterMinutes": {
       "type": "number",
-      "title": "Re-summarize every N turns",
-      "description": "The task line is first written after turn 1, then refreshed every N turns.",
+      "title": "A long task starts after N minutes",
+      "description": "Once this long has passed since your last prompt, the title is refreshed on the interval below.",
       "default": 3
+    },
+    "summarizeEveryMinutes": {
+      "type": "number",
+      "title": "Re-summarize a long task every N minutes",
+      "description": "Checked when a tool call or a turn finishes; an idle session is never re-summarized.",
+      "default": 2
     }
   },
   "author": {

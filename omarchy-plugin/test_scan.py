@@ -46,6 +46,44 @@ class WindowFor(unittest.TestCase):
             self.assertIsNone(scan.window_for(6, {}))
 
 
+class Roundhouse(unittest.TestCase):
+    def test_sid_is_the_first_eight_characters(self):
+        self.assertEqual(scan.roundhouse_sid("520a9593-0cb7-48dc-97da-2d7724564449"), "520a9593")
+
+    def test_odd_or_missing_ids_give_nothing(self):
+        for bad in (None, "", "short", 5, "abc def 123", "../../etc/passwd", "12345678; reboot", "x" * 65,
+                    "--help-----", "-abcdefgh", "-" * 8):
+            self.assertEqual(scan.roundhouse_sid(bad), "", bad)
+
+    def test_shown_reads_the_windows_file(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(scan, "ROUNDHOUSE_DIR", d):
+            self.assertEqual(scan.roundhouse_shown(), set())              # roundhouse not running
+            with open(os.path.join(d, "windows.json"), "w") as f:
+                json.dump({"shown": [{"id": "all", "sid": "*"}, {"id": "w1", "sid": "520a9593"}, {"id": "w2"}, 5]}, f)
+            self.assertEqual(scan.roundhouse_shown(), {"*", "520a9593"})
+            with open(os.path.join(d, "windows.json"), "w") as f:
+                f.write("{not json")
+            self.assertEqual(scan.roundhouse_shown(), set())
+
+    def test_shown_honours_the_lot_map_dir_override(self):
+        import importlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"LOT_MAP_DIR": d}):
+            importlib.reload(scan)
+            self.assertEqual(scan.ROUNDHOUSE_DIR, d)
+        importlib.reload(scan)
+
+    def test_map_state(self):
+        shown = {"*", "520a9593"}
+        self.assertEqual(scan.map_state(True, "520a9593", shown), (True, True))
+        self.assertEqual(scan.map_state(True, "ffffffff", shown), (True, False))   # someone else's window
+        self.assertEqual(scan.map_state(True, "ffffffff", {"*"}), (True, False))   # the all-sessions window does not light it
+        self.assertEqual(scan.map_state(False, "520a9593", shown), (False, False))  # roundhouse not installed
+        self.assertEqual(scan.map_state(True, "", shown), (False, False))           # the mod gave no id
+
+
 if __name__ == "__main__":
     unittest.main()
 
