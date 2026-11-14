@@ -182,7 +182,7 @@ Item {
             // The model is just each session's pid, so a window moving (which changes its
             // geometry on every scan) does not recreate the strip, and with it a drag in progress.
             required property var modelData
-            readonly property var info: root.byPid[modelData] ?? ({ task: "", phase: "idle", running: 0, x: 0, y: 0, w: 0, mx: 0, my: 0, monitor: "", address: "" })
+            readonly property var info: root.byPid[modelData] ?? ({ task: "", phase: "idle", running: 0, x: 0, y: 0, w: 0, mx: 0, my: 0, monitor: "", address: "", floaters: [] })
             property bool tipOpen: false
             // While the strip is dragged, follow.py reports the window's real geometry
             // (global x y w h) many times a second, which beats waiting for the next scan.
@@ -203,7 +203,38 @@ Item {
             // Not while its window is resizing, except during the strip's own drag: hiding
             // the surface under a held mouse button would cancel the drag.
             readonly property bool resizeHidden: (root.resizing[info.address] ?? false) && live === null && !follow.running
-            visible: targetScreen !== null && info.task.length > 0 && !resizeHidden
+            // The strip is a layer surface, so it paints over floating windows. Hide it while
+            // one covers it (scan.py lists the floaters above this window), then fade back in.
+            readonly property bool covered: {
+                const gx = (frame ? frame.x : info.x + info.mx) + root.borderSize;
+                const gy = (frame ? frame.y : info.y + info.my) + root.borderSize;
+                const gw = Math.max(0, (frame ? frame.w : info.w) - 2 * root.borderSize);
+                // Each floater's live geometry comes from the ~60 fps stream; the scan's rect is only
+                // the fallback, so the strip hides as soon as a floating window touches it.
+                return (info.floaters ?? []).some(f => {
+                    const g = root.geo[f[4]];
+                    const x = g ? g.x : f[0], y = g ? g.y : f[1], w = g ? g.w : f[2], h = g ? g.h : f[3];
+                    return x < gx + gw && x + w > gx && y < gy + root.stripHeight && y + h > gy;
+                });
+            }
+            property real fade: 1
+            onCoveredChanged: {
+                fadeIn.stop();
+                fade = 0;
+                if (!covered)
+                    fadeIn.start();
+            }
+            NumberAnimation {
+                id: fadeIn
+                target: strip
+                property: "fade"
+                from: 0
+                to: 1
+                duration: 1400
+                easing.type: Easing.InOutQuad
+            }
+            // Fully faded out and covered: drop the surface so it cannot take the mouse.
+            visible: targetScreen !== null && info.task.length > 0 && !resizeHidden && !covered
 
             anchors {
                 top: true
@@ -223,6 +254,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
+                opacity: strip.fade
                 color: Color.background
 
                 Item {

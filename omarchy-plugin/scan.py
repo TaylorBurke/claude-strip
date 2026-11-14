@@ -109,6 +109,27 @@ def recover_drags():
             pass
 
 
+def floaters_above(win, clients):
+    """Rects [x, y, w, h, address] (global) of floating windows drawn over `win`.
+
+    The strip is a layer-shell surface, so it paints above every window; the QML hides
+    the strip while one of these covers it. Floating windows stack above tiled ones, and
+    among floating windows the more recently focused is on top (lower focusHistoryID).
+    """
+    rects = []
+    for c in clients:
+        if c["address"] == win["address"] or not c.get("floating"):
+            continue
+        if not c.get("mapped") or c.get("hidden"):
+            continue
+        if c["workspace"]["id"] != win["workspace"]["id"]:
+            continue
+        if win.get("floating") and c.get("focusHistoryID", 0) > win.get("focusHistoryID", 0):
+            continue
+        rects.append([c["at"][0], c["at"][1], c["size"][0], c["size"][1], c["address"]])
+    return rects
+
+
 def main():
     recover_drags()
     files = glob.glob(os.path.join(STATE_DIR, "*.json"))
@@ -154,6 +175,7 @@ def main():
             w=win["size"][0],
             h=win["size"][1],
             fontPt=terminal_font_pt(win["pid"]),
+            floaters=floaters_above(win, clients),
         )
         out.append(s)
     print(json.dumps(out))

@@ -67,3 +67,27 @@ class RecoverDrags(unittest.TestCase):
             self.assertIn("address:0xabc123", run.call_args[0][0][-1])
             self.assertFalse(os.path.exists(dead))
             self.assertTrue(os.path.exists(alive))
+
+
+class FloatersAbove(unittest.TestCase):
+    @staticmethod
+    def client(addr, floating, focus, ws=1, at=(0, 0), size=(100, 100), **kw):
+        return dict(address=addr, floating=floating, focusHistoryID=focus, mapped=True,
+                    hidden=False, workspace={"id": ws}, at=list(at), size=list(size), **kw)
+
+    def test_floating_window_covers_a_tiled_one(self):
+        tiled = self.client("a", False, 5)
+        float_ = self.client("b", True, 9, at=(10, 20), size=(30, 40))
+        self.assertEqual(scan.floaters_above(tiled, [tiled, float_]), [[10, 20, 30, 40, "b"]])
+
+    def test_ignores_tiled_other_workspace_hidden_and_self(self):
+        win = self.client("a", False, 5)
+        others = [self.client("b", False, 1), self.client("c", True, 1, ws=2),
+                  dict(self.client("d", True, 1), hidden=True), win]
+        self.assertEqual(scan.floaters_above(win, others), [])
+
+    def test_floating_pair_stacks_by_focus(self):
+        top = self.client("a", True, 0)
+        under = self.client("b", True, 3)
+        self.assertEqual(scan.floaters_above(under, [top, under]), [[0, 0, 100, 100, "a"]])
+        self.assertEqual(scan.floaters_above(top, [top, under]), [])

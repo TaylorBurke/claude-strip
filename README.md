@@ -155,8 +155,9 @@ Plugins run unsandboxed with your user permissions, so for transparency:
   the approved tool finishes.
 - **The strip takes the mouse.** It is not click-through (hover and drag need
   input); it only covers terminal rows you could not see anyway.
-- **Always on top.** The strip is a layer-shell surface, so a floating window
-  dragged over a Claude window is drawn beneath it.
+- **Hidden under floating windows.** The strip is a layer-shell surface, so it
+  would draw over a floating window. Instead it hides while a floating window
+  covers it and fades back in over 1.4 seconds once it is clear.
 - **Hyprland only.** Window lookup uses `hyprctl`.
 - **Window-per-session.** Tabs and multiplexers (tmux panes) share one window,
   so only one session per window is shown.
