@@ -49,7 +49,13 @@ Item {
         function test_sessions_without_an_id_are_left_alone() {
             var r = MapJs.rebinds({ 100: "aaaaaaaa" }, [{ pid: 100, sid: "" }, { pid: 200, sid: "cccccccc" }]);
             compare(r.pairs, []);
-            compare(r.known, { 200: "cccccccc" });
+            compare(r.known, { 100: "aaaaaaaa", 200: "cccccccc" });     // 100 keeps what we knew
+        }
+        function test_a_strip_missing_from_one_scan_still_rebinds_when_back() {
+            var gone = MapJs.rebinds({ 100: "aaaaaaaa" }, []);
+            compare(gone.pairs, []);
+            var back = MapJs.rebinds(gone.known, [{ pid: 100, sid: "bbbbbbbb" }]);
+            compare(back.pairs, [["aaaaaaaa", "bbbbbbbb"]]);
         }
         function test_each_strip_is_judged_on_its_own_pid() {
             var r = MapJs.rebinds({ 1: "aaaaaaaa", 2: "bbbbbbbb" }, [{ pid: 1, sid: "aaaaaaaa" }, { pid: 2, sid: "dddddddd" }]);

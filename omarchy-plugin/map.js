@@ -5,6 +5,9 @@
 // Returns { pairs: [[old, new], ...], known: the new { pid: sid } }.
 function rebinds(known, sessions) {
     var pairs = [], seen = {};
+    // A strip missing from one scan (off-screen workspace, id briefly absent) keeps its remembered id,
+    // so a /clear while it is away is still seen as a change when it comes back.
+    Object.keys(known).forEach(function (pid) { seen[pid] = known[pid]; });
     sessions.forEach(function (s) {
         if (!s.sid) return;
         seen[s.pid] = s.sid;

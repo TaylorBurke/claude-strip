@@ -46,6 +46,7 @@ let isSummarizing = false
 // long, and the title is refreshed every `summaryEveryMs` as it changes gears.
 let promptAt = 0
 let lastSummaryAt = -1
+let retriedFor = -1   // the prompt whose failed title call has had its one retry
 let summaryEveryMs = 120_000
 let longTaskAfterMs = 180_000
 // Share of the context window in use, 0-100; -1 until the engine reports one.
@@ -108,6 +109,7 @@ async function recentActivity($: EngineInterface): Promise<string> {
 async function summarize($: EngineInterface): Promise<void> {
   if (!useHaiku || isSummarizing || recent.length === 0) return
   isSummarizing = true
+  const before = lastSummaryAt
   try {
     const now = await $.clock.now()
     lastSummaryAt = now
@@ -125,6 +127,12 @@ async function summarize($: EngineInterface): Promise<void> {
     // Wrapping quotes and a trailing full stop go; dots inside (file names) stay.
     const label = squash(text.replace(/^["'\s]+|["'.\s]+$/g, '').replace(/"/g, ''), MAX_TASK_CHARS)
     if (label) task = label
+  } catch {
+    // A failed call must not cost the prompt its title: let the next event try once more.
+    if (before < promptAt && retriedFor !== promptAt) {
+      retriedFor = promptAt
+      lastSummaryAt = before
+    }
   } finally {
     isSummarizing = false
   }

@@ -85,8 +85,9 @@ def terminal_font_pt(pid):
 def roundhouse_sid(session_id):
     """The 8-character session id roundhouse uses, or "" when the mod gave none (or an odd one).
 
-    It ends up in a command line, so only letters, digits, - and _ are accepted."""
-    if isinstance(session_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{8,64}", session_id):
+    It ends up in a command line, so only letters, digits, - and _ are accepted, and it cannot start
+    with "-" (it would be read as an option)."""
+    if isinstance(session_id, str) and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{7,63}", session_id):
         return session_id[:8]
     return ""
 
@@ -99,6 +100,13 @@ def roundhouse_shown():
         return {e["sid"] for e in entries if isinstance(e, dict) and isinstance(e.get("sid"), str)}
     except (OSError, ValueError, KeyError, TypeError):
         return set()
+
+
+def map_state(installed, sid, shown):
+    """(mapAvailable, mapShown) for one session. The all-sessions window ("*") is a different
+    window from the session's own, so it does not light the icon (a click would open one, not hide it)."""
+    available = bool(installed and sid)
+    return available, bool(available and sid in shown)
 
 
 def window_for(pid, clients_by_pid):
@@ -193,8 +201,8 @@ def main():
         sid = roundhouse_sid(s.get("sessionId"))
         s.update(
             sid=sid,
-            mapAvailable=bool(map_installed and sid),
-            mapShown=sid in map_shown,
+            mapAvailable=map_state(map_installed, sid, map_shown)[0],
+            mapShown=map_state(map_installed, sid, map_shown)[1],
             address=win["address"],
             monitor=mon["name"],
             x=win["at"][0] - mon["x"],

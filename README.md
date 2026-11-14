@@ -157,7 +157,7 @@ Plugins run unsandboxed with your user permissions, so for transparency:
   command is started with an argument list, never through a shell.
 - **Reads:** `/proc/<pid>/stat` (to walk parent processes), the state files
   in `$XDG_RUNTIME_DIR/claude-strip/`, and, if roundhouse is installed,
-  `$XDG_RUNTIME_DIR/lot-map/windows.json` (which sessions have a map open, to light the icon).
+  `$XDG_RUNTIME_DIR/lot-map/windows.json` (which sessions have a map open, to light the icon; `$LOT_MAP_DIR/windows.json` instead if that variable is set). The all-sessions map is a separate window and does not light any strip's icon.
 - **Writes/deletes:** only state files in that directory, and only stale ones
   (dead process or ended session). The mod writes them; the plugin deletes them.
   A drag leaves a short-lived `drag-*.pending` marker there so a window is

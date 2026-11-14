@@ -10,6 +10,7 @@ const SESSION = '520a9593-0cb7-48dc-97da-2d7724564449'
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths', bareText = false, unanswered = false) {
   const writes: Written[] = []
   let sessionId = SESSION
+  let failNext = 0
   const models: string[] = []
   const systems: string[] = []
   let transcript: unknown[] = []
@@ -35,10 +36,11 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
     models.push(typeof e.prompt === 'string' ? e.prompt : '')
     systems.push(typeof e.system === 'string' ? e.system : '')
     modelIds.push(e.model)
+    if (failNext > 0) { failNext--; throw new Error('model unavailable') }
     if (unanswered) return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
     return { value: bareText ? label : { isAnswered: true, text: label, usage: {} } } as never
   })
-  return { clock, writes, models, modelIds, systems, setTranscript: (rows: unknown[]) => { transcript = rows }, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id } }
+  return { clock, writes, models, modelIds, systems, setTranscript: (rows: unknown[]) => { transcript = rows }, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id }, failNext: (n: number) => { failNext = n } }
 }
 
 test('session.start publishes the project under the claude pid', async ($, on) => {
@@ -232,6 +234,28 @@ test('pasted-content tags are not part of the title or the prompt sent to Haiku'
   await world.clock.advance(0)
   expect(world.models[0]).not.toContain('pasted_content')
   expect(world.modelIds).toEqual(['claude-haiku-5-5'])
+})
+
+test('a failed title call is retried once on the next event, not on every one', async ($, on) => {
+  const world = engine(on)
+  world.failNext(2)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'ota paths are broken' })
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(1)                 // failed
+  await $.tool.call({ tool: 'Read', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(2)                 // the one retry, also failed
+  await $.tool.call({ tool: 'Read', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(2)                 // no hammering
+  await world.clock.advance(1_000)
+  await $.prompt.submit({ text: 'next thing' })       // a new prompt starts afresh
+  await $.tool.call({ tool: 'Bash', input: {} } as never)
+  await world.clock.advance(0)
+  expect(world.models).toHaveLength(3)
+  expect(world.last()?.task).toBe('fixing OTA asset paths')
 })
 
 test('a completion that resolves bare text still sets the task', async ($, on) => {
