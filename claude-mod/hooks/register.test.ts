@@ -7,12 +7,13 @@ const FILE = `/run/user/1000/claude-strip/${PID}.json`
 const SESSION = '520a9593-0cb7-48dc-97da-2d7724564449'
 
 // Stand-ins for the engine's own nouns, so the mod runs against what it would see.
-function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths') {
+function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths', bareText = false, unanswered = false) {
   const writes: Written[] = []
   let sessionId = SESSION
   const models: string[] = []
   const systems: string[] = []
   let transcript: unknown[] = []
+  const modelIds: string[] = []
   const clock = mock.clock(on)
   mock.env(on, { XDG_RUNTIME_DIR: '/run/user/1000' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -33,9 +34,11 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   on('model.complete', (_$, e) => {
     models.push(typeof e.prompt === 'string' ? e.prompt : '')
     systems.push(typeof e.system === 'string' ? e.system : '')
-    return { value: { isAnswered: true, text: label, usage: {} } } as never
+    modelIds.push(e.model)
+    if (unanswered) return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
+    return { value: bareText ? label : { isAnswered: true, text: label, usage: {} } } as never
   })
-  return { clock, writes, models, systems, setTranscript: (rows: unknown[]) => { transcript = rows }, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id } }
+  return { clock, writes, models, modelIds, systems, setTranscript: (rows: unknown[]) => { transcript = rows }, last: () => writes[writes.length - 1]?.body, setSession: (id: string) => { sessionId = id } }
 }
 
 test('session.start publishes the project under the claude pid', async ($, on) => {
@@ -228,6 +231,28 @@ test('pasted-content tags are not part of the title or the prompt sent to Haiku'
   await $.turn.complete({ reason: 'answer', answer: 'ok' } as never)
   await world.clock.advance(0)
   expect(world.models[0]).not.toContain('pasted_content')
+  expect(world.modelIds).toEqual(['claude-haiku-5-5'])
+})
+
+test('a completion that resolves bare text still sets the task', async ($, on) => {
+  const world = engine(on, 'tracing the drag bug', true)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'drag is broken' })
+  await $.turn.complete({ reason: 'answer', answer: 'Found it' } as never)
+  await world.clock.advance(0)
+
+  expect(world.last()).toMatchObject({ task: 'tracing the drag bug' })
+})
+
+test('an unanswered completion keeps the existing title', async ($, on) => {
+  const world = engine(on, 'ignored', false, true)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'drag is broken' })
+  await $.turn.complete({ reason: 'answer', answer: 'Found it' } as never)
+  await world.clock.advance(0)
+
+  expect(world.models).toHaveLength(1)
+  expect(world.last()).toMatchObject({ task: 'drag is broken' })
 })
 
 test('the context fill is published after a turn', async ($, on) => {

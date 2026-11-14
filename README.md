@@ -148,7 +148,7 @@ Plugins run unsandboxed with your user permissions, so for transparency:
   frame. While you drag a strip, `follow.py` talks to Hyprland's socket to float, move
   and re-tile that one window. At load, `mod_setup.py check` runs
   `claude plugin list` and, only if the mod is missing, sends a notification; on
-  your click it runs `claude plugin marketplace add TaylorBurke/claude-strip`
+  your click it runs `claude plugin marketplace add <this repository's root, the parent of omarchy-plugin/>`
   and `claude plugin install session-strip@claude-strip`.
 - **Optional, only if `roundhouse` is on your PATH:** clicking a strip's map icon runs
   `roundhouse toggle <session id>`, and when a session's id changes (a `/clear`) the strip runs
@@ -177,8 +177,9 @@ Plugins run unsandboxed with your user permissions, so for transparency:
   the approved tool finishes.
 - **The strip takes the mouse.** It is not click-through (hover and drag need
   input); it only covers terminal rows you could not see anyway.
-- **Always on top.** The strip is a layer-shell surface, so a floating window
-  dragged over a Claude window is drawn beneath it.
+- **Hidden under floating windows.** The strip is a layer-shell surface, so it
+  would draw over a floating window. Instead it hides while a floating window
+  covers it and fades back in over 1.4 seconds once it is clear.
 - **Hyprland only.** Window lookup uses `hyprctl`.
 - **Window-per-session.** Tabs and multiplexers (tmux panes) share one window,
   so only one session per window is shown.

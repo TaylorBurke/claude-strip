@@ -117,12 +117,14 @@ async function summarize($: EngineInterface): Promise<void> {
       `Recent user prompts, oldest first:\n${recent.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n` +
       `Minutes since the user's last prompt: ${sincePrompt}\n` +
       `What the assistant has been doing, oldest first:\n${await recentActivity($)}`
-    const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 96, effort: 'low' })
-    if (r.isAnswered) {
-      // Wrapping quotes and a trailing full stop go; dots inside (file names) stay.
-      const label = squash(r.text.replace(/^["'\s]+|["'.\s]+$/g, '').replace(/"/g, ''), MAX_TASK_CHARS)
-      if (label) task = label
-    }
+    const r = await $.model.complete({ model: 'claude-haiku-5-5', system: SYSTEM, prompt, maxTokens: 96, effort: 'low' })
+    // Current Claude Code resolves a result object ({ isAnswered, text }); some published
+    // declarations describe the bare text instead. Accept either so a reply is never dropped.
+    const reply: unknown = r
+    const text = typeof reply === 'string' ? reply : r.isAnswered ? r.text : ''
+    // Wrapping quotes and a trailing full stop go; dots inside (file names) stay.
+    const label = squash(text.replace(/^["'\s]+|["'.\s]+$/g, '').replace(/"/g, ''), MAX_TASK_CHARS)
+    if (label) task = label
   } finally {
     isSummarizing = false
   }
