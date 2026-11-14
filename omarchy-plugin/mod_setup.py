@@ -12,7 +12,9 @@ import subprocess
 import sys
 import time
 
-MARKETPLACE = "TaylorBurke/claude-strip"
+# The marketplace is this plugin's own checkout, so the mod installed is the exact code
+# that shipped with (and was reviewed alongside) the strip, not whatever GitHub serves later.
+MARKETPLACE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLUGIN = "session-strip@claude-strip"
 ASK_EVERY = 7 * 24 * 3600
 STATE_HOME = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))

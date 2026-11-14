@@ -6,9 +6,10 @@ const PID = 4242
 const FILE = `/run/user/1000/claude-strip/${PID}.json`
 
 // Stand-ins for the engine's own nouns, so the mod runs against what it would see.
-function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths') {
+function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths', bareText = false, unanswered = false) {
   const writes: Written[] = []
   const models: string[] = []
+  const modelIds: string[] = []
   const clock = mock.clock(on)
   mock.env(on, { XDG_RUNTIME_DIR: '/run/user/1000' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -25,9 +26,11 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   })
   on('model.complete', (_$, e) => {
     models.push(typeof e.prompt === 'string' ? e.prompt : '')
-    return { value: { isAnswered: true, text: label, usage: {} } } as never
+    modelIds.push(e.model)
+    if (unanswered) return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
+    return { value: bareText ? label : { isAnswered: true, text: label, usage: {} } } as never
   })
-  return { clock, writes, models, last: () => writes[writes.length - 1]?.body }
+  return { clock, writes, models, modelIds, last: () => writes[writes.length - 1]?.body }
 }
 
 test('session.start publishes the project under the claude pid', async ($, on) => {
@@ -81,9 +84,31 @@ test('turn.complete goes idle and Haiku rewrites the task after turn 1', async (
   await world.clock.advance(0)
 
   expect(world.models).toHaveLength(1)
+  expect(world.modelIds).toEqual(['claude-haiku-5-5'])
   expect(world.models[0]).toContain('ota paths are broken')
   expect(world.models[0]).toContain('Found the stale asset manifest')
   expect(world.last()).toMatchObject({ phase: 'idle', turns: 1, task: 'fixing OTA asset paths' })
+})
+
+test('a completion that resolves bare text still sets the task', async ($, on) => {
+  const world = engine(on, 'tracing the drag bug', true)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'drag is broken' })
+  await $.turn.complete({ reason: 'answer', answer: 'Found it' } as never)
+  await world.clock.advance(0)
+
+  expect(world.last()).toMatchObject({ task: 'tracing the drag bug' })
+})
+
+test('an unanswered completion keeps the existing title', async ($, on) => {
+  const world = engine(on, 'ignored', false, true)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'drag is broken' })
+  await $.turn.complete({ reason: 'answer', answer: 'Found it' } as never)
+  await world.clock.advance(0)
+
+  expect(world.models).toHaveLength(1)
+  expect(world.last()).toMatchObject({ task: 'drag is broken' })
 })
 
 test('the context fill is published after a turn', async ($, on) => {
