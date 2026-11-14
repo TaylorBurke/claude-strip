@@ -132,7 +132,7 @@ Plugins run unsandboxed with your user permissions, so for transparency:
   frame. While you drag a strip, `follow.py` talks to Hyprland's socket to float, move
   and re-tile that one window. At load, `mod_setup.py check` runs
   `claude plugin list` and, only if the mod is missing, sends a notification; on
-  your click it runs `claude plugin marketplace add TaylorBurke/claude-strip`
+  your click it runs `claude plugin marketplace add <the plugin's own directory>`
   and `claude plugin install session-strip@claude-strip`.
 - **Reads:** `/proc/<pid>/stat` (to walk parent processes) and the state files
   in `$XDG_RUNTIME_DIR/claude-strip/`.

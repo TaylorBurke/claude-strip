@@ -61,10 +61,12 @@ async function summarize($: EngineInterface): Promise<void> {
       `Recent user prompts, oldest first:\n${recent.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n` +
       `Assistant's latest reply (start of it):\n${lastAnswer || '(none yet)'}`
     const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 64, effort: 'low' })
-    if (r.isAnswered) {
-      const label = squash(r.text.replace(/["'.]/g, ''), MAX_TASK_CHARS)
-      if (label) task = label
-    }
+    // Current Claude Code resolves a result object ({ isAnswered, text }); some published
+    // declarations describe the bare text instead. Accept either so a reply is never dropped.
+    const reply: unknown = r
+    const text = typeof reply === 'string' ? reply : r.isAnswered ? r.text : ''
+    const label = squash(text.replace(/["'.]/g, ''), MAX_TASK_CHARS)
+    if (label) task = label
   } finally {
     isSummarizing = false
   }
