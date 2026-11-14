@@ -58,7 +58,7 @@ class Roundhouse(unittest.TestCase):
     def test_shown_reads_the_windows_file(self):
         import json
         import tempfile
-        with tempfile.TemporaryDirectory() as d, mock.patch.object(scan, "ROUNDHOUSE_DIR", d):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"LOT_MAP_DIR": d}):
             self.assertEqual(scan.roundhouse_shown(), set())              # roundhouse not running
             with open(os.path.join(d, "windows.json"), "w") as f:
                 json.dump({"shown": [{"id": "all", "sid": "*"}, {"id": "w1", "sid": "520a9593"}, {"id": "w2"}, 5]}, f)
@@ -67,13 +67,12 @@ class Roundhouse(unittest.TestCase):
                 f.write("{not json")
             self.assertEqual(scan.roundhouse_shown(), set())
 
-    def test_shown_honours_the_lot_map_dir_override(self):
-        import importlib
+    def test_the_lot_map_dir_override_is_read_each_time(self):
         import tempfile
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"LOT_MAP_DIR": d}):
-            importlib.reload(scan)
-            self.assertEqual(scan.ROUNDHOUSE_DIR, d)
-        importlib.reload(scan)
+            self.assertEqual(scan.roundhouse_dir(), d)
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/run/x"}, clear=True):
+            self.assertEqual(scan.roundhouse_dir(), "/run/x/lot-map")
 
     def test_map_state(self):
         shown = {"*", "520a9593"}

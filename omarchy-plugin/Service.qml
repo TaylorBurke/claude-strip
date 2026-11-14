@@ -64,9 +64,11 @@ Item {
 
     // A /clear gives a session a new id without any other sign; the map shown for the old id moves along.
     property var knownSids: ({})
+    property var missingScans: ({})
     onSessionsChanged: {
-        const r = MapJs.rebinds(knownSids, sessions);
+        const r = MapJs.rebinds(knownSids, sessions, missingScans);
         knownSids = r.known;
+        missingScans = r.missing;
         if (sessions.some(s => s.mapAvailable))
             for (const pair of r.pairs)
                 roundhouse(["rebind", pair[0], pair[1]]);

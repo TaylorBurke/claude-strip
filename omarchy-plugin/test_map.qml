@@ -57,6 +57,22 @@ Item {
             var back = MapJs.rebinds(gone.known, [{ pid: 100, sid: "bbbbbbbb" }]);
             compare(back.pairs, [["aaaaaaaa", "bbbbbbbb"]]);
         }
+        function test_a_strip_that_stays_gone_is_forgotten() {
+            var k = { 100: "aaaaaaaa" }, m = {};
+            for (var i = 0; i < MapJs.keepScans; i++) {
+                var r = MapJs.rebinds(k, [], m);
+                k = r.known; m = r.missing;
+            }
+            compare(k, { 100: "aaaaaaaa" });                       // still remembered at the limit
+            r = MapJs.rebinds(k, [], m);
+            compare(r.known, {});                                  // then dropped
+            compare(MapJs.rebinds(r.known, [{ pid: 100, sid: "zzzzzzzz" }], r.missing).pairs, []);   // a reused pid is first sight
+        }
+        function test_coming_back_resets_the_count() {
+            var r = MapJs.rebinds({ 100: "aaaaaaaa" }, [], { 100: 5 });
+            compare(r.missing, { 100: 6 });
+            compare(MapJs.rebinds(r.known, [{ pid: 100, sid: "aaaaaaaa" }], r.missing).missing, {});
+        }
         function test_each_strip_is_judged_on_its_own_pid() {
             var r = MapJs.rebinds({ 1: "aaaaaaaa", 2: "bbbbbbbb" }, [{ pid: 1, sid: "aaaaaaaa" }, { pid: 2, sid: "dddddddd" }]);
             compare(r.pairs, [["bbbbbbbb", "dddddddd"]]);
