@@ -16,7 +16,8 @@ import subprocess
 STATE_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-strip")
 CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
 # roundhouse (optional): a window with a live map of a session. It lists the windows it shows here.
-ROUNDHOUSE_DIR = os.environ.get("LOT_MAP_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "lot-map")
+def roundhouse_dir():
+    return os.environ.get("LOT_MAP_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "lot-map")
 
 # Where each terminal keeps its font size, and the size it uses when unset.
 TERMINAL_CONFIGS = {
@@ -95,7 +96,7 @@ def roundhouse_sid(session_id):
 def roundhouse_shown():
     """The session ids that have a roundhouse window right now (empty if roundhouse is not running)."""
     try:
-        with open(os.path.join(ROUNDHOUSE_DIR, "windows.json"), encoding="utf-8") as f:
+        with open(os.path.join(roundhouse_dir(), "windows.json"), encoding="utf-8") as f:
             entries = json.load(f)["shown"]
         return {e["sid"] for e in entries if isinstance(e, dict) and isinstance(e.get("sid"), str)}
     except (OSError, ValueError, KeyError, TypeError):
@@ -199,10 +200,11 @@ def main():
         if not win or not mon or win["workspace"]["id"] not in visible:
             continue
         sid = roundhouse_sid(s.get("sessionId"))
+        available, lit = map_state(map_installed, sid, map_shown)
         s.update(
             sid=sid,
-            mapAvailable=map_state(map_installed, sid, map_shown)[0],
-            mapShown=map_state(map_installed, sid, map_shown)[1],
+            mapAvailable=available,
+            mapShown=lit,
             address=win["address"],
             monitor=mon["name"],
             x=win["at"][0] - mon["x"],
