@@ -205,7 +205,10 @@ Item {
             readonly property bool resizeHidden: (root.resizing[info.address] ?? false) && live === null && !follow.running
             // The strip is a layer surface, so it paints over floating windows. Hide it while
             // one covers it (scan.py lists the floaters above this window), then fade back in.
-            readonly property bool covered: {
+            // Never while the strip is being dragged: hiding the surface under a held mouse
+            // button would cancel the drag (same exemption as resizeHidden).
+            readonly property bool covered: live === null && !follow.running && coveredByFloater
+            readonly property bool coveredByFloater: {
                 const gx = (frame ? frame.x : info.x + info.mx) + root.borderSize;
                 const gy = (frame ? frame.y : info.y + info.my) + root.borderSize;
                 const gw = Math.max(0, (frame ? frame.w : info.w) - 2 * root.borderSize);

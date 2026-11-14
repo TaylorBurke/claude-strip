@@ -6,6 +6,20 @@ from unittest import mock
 import mod_setup
 
 
+class Marketplace(unittest.TestCase):
+    def test_is_the_repository_root_holding_the_marketplace_manifest(self):
+        self.assertTrue(os.path.isfile(os.path.join(mod_setup.MARKETPLACE, ".claude-plugin", "marketplace.json")))
+        self.assertEqual(os.path.basename(mod_setup.MARKETPLACE) != "omarchy-plugin", True)
+
+    def test_install_adds_that_local_path_not_a_remote_slug(self):
+        done = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(mod_setup, "run", return_value=done) as run, \
+                mock.patch.object(mod_setup, "notify"):
+            mod_setup.install()
+        self.assertEqual(run.call_args_list[0].args[0],
+                         ["claude", "plugin", "marketplace", "add", mod_setup.MARKETPLACE])
+
+
 class AskedRecently(unittest.TestCase):
     def test_no_marker_means_never_asked(self):
         with mock.patch.object(mod_setup, "MARKER", "/nonexistent/marker"):

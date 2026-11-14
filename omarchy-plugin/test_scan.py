@@ -83,7 +83,8 @@ class FloatersAbove(unittest.TestCase):
     def test_ignores_tiled_other_workspace_hidden_and_self(self):
         win = self.client("a", False, 5)
         others = [self.client("b", False, 1), self.client("c", True, 1, ws=2),
-                  dict(self.client("d", True, 1), hidden=True), win]
+                  dict(self.client("d", True, 1), hidden=True),
+                  dict(self.client("e", True, 1), mapped=False), win]
         self.assertEqual(scan.floaters_above(win, others), [])
 
     def test_floating_pair_stacks_by_focus(self):
