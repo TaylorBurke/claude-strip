@@ -9,6 +9,7 @@ const FILE = `/run/user/1000/claude-strip/${PID}.json`
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing OTA asset paths', bareText = false) {
   const writes: Written[] = []
   const models: string[] = []
+  const modelIds: string[] = []
   const clock = mock.clock(on)
   mock.env(on, { XDG_RUNTIME_DIR: '/run/user/1000' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -25,9 +26,10 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], label = 'fixing O
   })
   on('model.complete', (_$, e) => {
     models.push(typeof e.prompt === 'string' ? e.prompt : '')
+    modelIds.push(e.model)
     return { value: bareText ? label : { isAnswered: true, text: label, usage: {} } } as never
   })
-  return { clock, writes, models, last: () => writes[writes.length - 1]?.body }
+  return { clock, writes, models, modelIds, last: () => writes[writes.length - 1]?.body }
 }
 
 test('session.start publishes the project under the claude pid', async ($, on) => {
@@ -81,6 +83,7 @@ test('turn.complete goes idle and Haiku rewrites the task after turn 1', async (
   await world.clock.advance(0)
 
   expect(world.models).toHaveLength(1)
+  expect(world.modelIds).toEqual(['claude-haiku-5-5'])
   expect(world.models[0]).toContain('ota paths are broken')
   expect(world.models[0]).toContain('Found the stale asset manifest')
   expect(world.last()).toMatchObject({ phase: 'idle', turns: 1, task: 'fixing OTA asset paths' })

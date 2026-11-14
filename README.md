@@ -73,7 +73,7 @@ only adds itself to the plugin list in `shell.json` when you enable it.
 Mod options (Claude Code config menu):
 
 - **Summarize the task with Haiku** (default on). After turn 1 and then every N
-  turns, one Haiku call through your session's own client rewrites the title
+  turns, one Haiku 5.5 call through your session's own client rewrites the title
   (8-14 words, naming the concrete feature or bug). It sends the project name,
   the last four prompts (each cut to 300 characters) and the start of the
   assistant's latest reply (500 characters), and costs about $0.001. Off: the

@@ -60,7 +60,7 @@ async function summarize($: EngineInterface): Promise<void> {
       `Project: ${project}\nPrevious title: ${task || '(none)'}\n` +
       `Recent user prompts, oldest first:\n${recent.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n` +
       `Assistant's latest reply (start of it):\n${lastAnswer || '(none yet)'}`
-    const r = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt, maxTokens: 64, effort: 'low' })
+    const r = await $.model.complete({ model: 'claude-haiku-5-5', system: SYSTEM, prompt, maxTokens: 64, effort: 'low' })
     // Current Claude Code resolves a result object ({ isAnswered, text }); some published
     // declarations describe the bare text instead. Accept either so a reply is never dropped.
     const reply: unknown = r
